@@ -1,24 +1,25 @@
 package com.piggy.piggyfinance.utils;
 
+import com.piggy.piggyfinance.exceptions.UnauthorizedException;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.UUID;
 
-public class SecurityUtils {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class SecurityUtils {
 
     public static UUID getAuthenticatedUserId() {
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("User not authenticated");
+            throw new UnauthorizedException("User is not authenticated");
         }
 
-        Object principal = authentication.getPrincipal();
-
-        if (!(principal instanceof UUID userId)) {
-            throw new RuntimeException("Invalid authentication principal");
+        if (!(authentication.getPrincipal() instanceof UUID userId)) {
+            throw new UnauthorizedException("Invalid authentication principal");
         }
 
         return userId;

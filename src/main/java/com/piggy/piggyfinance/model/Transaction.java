@@ -13,10 +13,10 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "transactions")
-@Data
+@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-@Builder
+@Builder(toBuilder = true)
 public class Transaction {
 
     @Id
@@ -50,7 +50,7 @@ public class Transaction {
     private LocalDateTime timestamp;
 
     @NotNull
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 }

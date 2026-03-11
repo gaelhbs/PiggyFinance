@@ -3,21 +3,26 @@ package com.piggy.piggyfinance.service.impl;
 import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.factory.TransactionFactory;
+import com.piggy.piggyfinance.mappers.TransactionMapper;
 import com.piggy.piggyfinance.model.Transaction;
 import com.piggy.piggyfinance.model.User;
 import com.piggy.piggyfinance.model.filters.TransactionFilter;
 import com.piggy.piggyfinance.model.requests.CreateTransactionRequest;
+import com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest;
+import com.piggy.piggyfinance.model.responses.TransactionResponse;
 import com.piggy.piggyfinance.model.responses.TransactionSummaryResponse;
 import com.piggy.piggyfinance.repository.TransactionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.repository.specifications.TransactionSpecification;
 import com.piggy.piggyfinance.service.TransactionService;
-import com.piggy.piggyfinance.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,43 +30,69 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class TransactionServiceImpl implements TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
+    private final TransactionMapper transactionMapper;
 
     @Override
-    public Transaction createTransaction(CreateTransactionRequest request, TransactionSourceEnum source) {
-        validate(request);
+    @Transactional
+    public TransactionResponse createTransaction(CreateTransactionRequest request, TransactionSourceEnum source, UUID userId) {
+        validate(request.amount(), request.type(), request.category());
 
-        UUID userId = SecurityUtils.getAuthenticatedUserId();
+        log.info("Creating {} transaction for user {}", source, userId);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = findUserById(userId);
+        Transaction saved = transactionRepository.save(TransactionFactory.create(request, source, user));
 
-        Transaction transaction =
-                TransactionFactory.create(request, source, user);
-
-        return transactionRepository.save(transaction);
+        log.info("Transaction created: {}", saved.getId());
+        return transactionMapper.toResponse(saved);
     }
 
     @Override
-    public Page<Transaction> listTransactions(TransactionFilter filter, Pageable pageable) {
-        UUID userId = SecurityUtils.getAuthenticatedUserId();
+    @Transactional
+    public TransactionResponse createWhatsAppTransaction(CreateWhatsAppTransactionRequest request) {
+        validate(request.amount(), request.type(), request.category());
 
-        return transactionRepository.findAll(
-                TransactionSpecification.byFilter(filter, userId),
-                pageable
+        log.info("Creating WhatsApp transaction for user email: {}", request.userEmail());
+
+        User user = userRepository.findByEmail(request.userEmail())
+                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + request.userEmail()));
+
+        CreateTransactionRequest transactionRequest = new CreateTransactionRequest(
+                request.description(), request.amount(), request.type(), request.category()
+        );
+
+        Transaction saved = transactionRepository.save(
+                TransactionFactory.create(transactionRequest, TransactionSourceEnum.WHATSAPP, user)
+        );
+
+        log.info("WhatsApp transaction created: {}", saved.getId());
+        return transactionMapper.toResponse(saved);
+    }
+
+    @Override
+    public Page<TransactionResponse> listTransactions(TransactionFilter filter, Pageable pageable, UUID userId) {
+        log.debug("Listing transactions for user {}", userId);
+        return transactionMapper.toResponsePage(
+                transactionRepository.findAll(TransactionSpecification.byFilter(filter, userId), pageable)
         );
     }
 
     @Override
     public TransactionSummaryResponse getSummary(UUID userId, LocalDate startDate, LocalDate endDate) {
+        LocalDate from = startDate != null ? startDate : LocalDate.now().withDayOfMonth(1);
+        LocalDate to = endDate != null ? endDate : LocalDate.now();
 
-        LocalDateTime start = startDate.atStartOfDay();
-        LocalDateTime end = endDate.atTime(LocalTime.MAX);
+        log.debug("Getting summary for user {} from {} to {}", userId, from, to);
+
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.atTime(LocalTime.MAX);
 
         var result = transactionRepository.getSummary(userId, start, end);
 
@@ -76,27 +107,21 @@ public class TransactionServiceImpl implements TransactionService {
             }
         }
 
-        BigDecimal balance = totalIncome.subtract(totalExpense);
-
-        return new TransactionSummaryResponse(
-                totalIncome,
-                totalExpense,
-                balance
-        );
+        return new TransactionSummaryResponse(totalIncome, totalExpense, totalIncome.subtract(totalExpense));
     }
 
-    private void validate(CreateTransactionRequest request) {
+    private User findUserById(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+    }
 
-        if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
+    private void validate(BigDecimal amount, TransactionType type, Object category) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("Transaction amount must be greater than zero");
         }
 
-        if (request.type() == TransactionType.EXPENSE && request.category() == null) {
+        if (type == TransactionType.EXPENSE && category == null) {
             throw new BusinessException("Category is required for EXPENSE transactions");
-        }
-
-        if (request.type() == TransactionType.INCOME && request.category() != null) {
-            throw new BusinessException("Category is not allowed for INCOME transactions");
         }
     }
 }

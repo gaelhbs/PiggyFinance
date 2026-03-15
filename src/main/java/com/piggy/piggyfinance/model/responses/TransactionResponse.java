@@ -1,5 +1,7 @@
 package com.piggy.piggyfinance.model.responses;
 
+import com.piggy.piggyfinance.enums.CategoryType;
+import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
 
 import java.math.BigDecimal;
@@ -11,5 +13,7 @@ public record TransactionResponse(
         String description,
         BigDecimal amount,
         TransactionType type,
+        TransactionSourceEnum source,
+        CategoryType category,
         LocalDateTime timestamp
 ) {}

@@ -24,12 +24,11 @@ public class JwtServiceImpl implements JwtService {
 
     @Override
     public String generateToken(User user) {
-
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
-                .setSubject(user.getId().toString())                 // subject = email
+                .setSubject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .setIssuedAt(now)
                 .setExpiration(expiry)
@@ -40,8 +39,9 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public boolean isTokenValid(String token) {
         try {
-            Jwts.parser()
-                    .setSigningKey(secret)
+            Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
                     .parseClaimsJws(token);
             return true;
         } catch (Exception e) {
@@ -51,8 +51,9 @@ public class JwtServiceImpl implements JwtService {
 
     @Override
     public UUID extractUserId(String token) {
-        String subject = Jwts.parser()
-                .setSigningKey(secret)
+        String subject = Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
                 .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
@@ -66,5 +67,3 @@ public class JwtServiceImpl implements JwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }
-
-

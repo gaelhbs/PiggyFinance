@@ -38,9 +38,11 @@ CREATE TABLE whatsapp_link_codes (
     id         UUID PRIMARY KEY,
     user_id    UUID NOT NULL REFERENCES users(id),
     code       VARCHAR(10) NOT NULL UNIQUE,
-    expires_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     used       BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+CREATE INDEX idx_whatsapp_link_codes_user_id ON whatsapp_link_codes(user_id);
 ```
 
 - Code expires after 15 minutes.
@@ -58,11 +60,16 @@ CREATE TABLE whatsapp_link_codes (
 - **Response:**
   ```json
   {
-    "code": "PIGGY-4821",
-    "expiresAt": "2026-04-24T15:30:00"
+    "code": "PIGGY-482193",
+    "expiresAt": "2026-04-24T15:30:00Z"
   }
   ```
-- **Behavior:** generates a random 4–6 digit code in the format `PIGGY-XXXX`, stores it with the authenticated user's ID and a 15-minute expiry. If the user already has an unexpired, unused code, return that instead of generating a new one.
+- **Behavior:**
+  - If the authenticated user already has a **linked phone number**, return `409` with `errorCode: "ALREADY_LINKED"`.
+  - If the user has an **existing unexpired, unused code**, return that code instead of generating a new one.
+  - Otherwise, generate a random **6-digit** code in the format `PIGGY-XXXXXX`, store it with the user's ID and a 15-minute expiry.
+  - Rate limiting: at most one active code per user at a time (enforced by the "return existing" rule above). Generating after a code expires or is used is always allowed.
+- `expiresAt` is always returned in ISO-8601 UTC format (e.g., `2026-04-24T15:30:00Z`).
 
 ### New: `POST /api/v1/users/whatsapp/link/confirm`
 
@@ -71,16 +78,29 @@ CREATE TABLE whatsapp_link_codes (
   ```json
   {
     "phoneNumber": "+5511999999999",
-    "code": "PIGGY-4821"
+    "code": "PIGGY-482193"
   }
   ```
-- **Response:** `200 OK` on success
-- **Error cases:**
-  - `404` — code not found
-  - `410` — code expired
-  - `409` — code already used
-  - `409` — phone number already linked to another account
-- **Behavior:** validates code, sets `users.phone_number = phoneNumber`, marks code as `used = true`.
+- **Success response `200 OK`:**
+  ```json
+  { "message": "Account linked successfully." }
+  ```
+- **Error cases (all include `errorCode` field in body):**
+
+  | HTTP | `errorCode` | Meaning |
+  |------|-------------|---------|
+  | `404` | `CODE_NOT_FOUND` | Code does not exist |
+  | `410` | `CODE_EXPIRED` | Code exists but is past `expires_at` |
+  | `422` | `CODE_ALREADY_USED` | Code was already consumed |
+  | `409` | `PHONE_ALREADY_LINKED` | Phone number is linked to a different account |
+
+- **Behavior:** validates in order:
+  1. Code exists → else `404 CODE_NOT_FOUND`
+  2. Code not expired → else `410 CODE_EXPIRED`
+  3. Code not used → else `422 CODE_ALREADY_USED`
+  4. Destination phone not linked to another account → else `409 PHONE_ALREADY_LINKED`
+  5. Code's owner (`user_id`) does not already have a phone number → else `409 ALREADY_LINKED`
+  6. Sets `users.phone_number = phoneNumber`, marks code as `used = true`.
 
 ### Modified: `POST /api/v1/transactions/whatsapp`
 
@@ -95,7 +115,7 @@ CREATE TABLE whatsapp_link_codes (
     "category": "FOOD"
   }
   ```
-- **Behavior:** backend resolves the user by `phoneNumber`. Returns `404` with a friendly message if the phone number is not linked to any account, so n8n can forward the error to the user in WhatsApp.
+- **Behavior:** backend resolves the user by `phoneNumber`. Returns `404` with `errorCode: "PHONE_NOT_LINKED"` if no account is associated, so n8n can forward a helpful message to the user.
 
 ---
 
@@ -106,18 +126,18 @@ CREATE TABLE whatsapp_link_codes (
         |
         | POST /api/v1/users/whatsapp/link/generate  (JWT)
         v
-[Backend] generates PIGGY-XXXX → stores in whatsapp_link_codes
+[Backend] generates PIGGY-XXXXXX → stores in whatsapp_link_codes
         |
         | returns { code, expiresAt }
         v
-[App shows] "Envie este código pelo WhatsApp: PIGGY-4821 (válido por 15 min)"
+[App shows] "Envie este código pelo WhatsApp: PIGGY-482193 (válido por 15 min)"
         |
-[User sends "PIGGY-4821" via WhatsApp]
+[User sends "PIGGY-482193" via WhatsApp]
         |
-[n8n: message matches /^PIGGY-\d{4,6}$/]
+[n8n: message matches /^PIGGY-\d{6}$/]
         |
         | POST /api/v1/users/whatsapp/link/confirm  (API Key)
-        | { phoneNumber: senderPhone, code: "PIGGY-4821" }
+        | { phoneNumber: senderPhone, code: "PIGGY-482193" }
         v
 [Backend] validates → saves phoneNumber to user → marks code used
         |
@@ -131,7 +151,7 @@ CREATE TABLE whatsapp_link_codes (
 ```
 [User sends transaction message via WhatsApp]
         |
-[n8n: message does NOT match PIGGY-XXXX pattern]
+[n8n: message does NOT match PIGGY-XXXXXX pattern]
         |
 [n8n interprets message as transaction via LLM/parsing]
         |
@@ -148,9 +168,10 @@ CREATE TABLE whatsapp_link_codes (
 Add a condition node as the first step after receiving a WhatsApp message:
 
 ```
-IF message matches /^PIGGY-\d{4,6}$/
+IF message matches /^PIGGY-\d{6}$/
   → call POST /api/v1/users/whatsapp/link/confirm
-  → reply to user: "Conta vinculada!" or forward error
+  → on success: reply "Conta vinculada com sucesso!"
+  → on error: reply based on errorCode (see Error Handling table)
 ELSE
   → existing transaction interpretation flow (unchanged)
 ```
@@ -159,13 +180,21 @@ ELSE
 
 ## Error Handling
 
-| Scenario | Backend response | n8n action |
-|---|---|---|
-| Code not found | `404` | Reply: "Código inválido." |
-| Code expired | `410` | Reply: "Código expirado. Gere um novo no app." |
-| Code already used | `409` | Reply: "Código já utilizado." |
-| Phone already linked elsewhere | `409` | Reply: "Número já vinculado a outra conta." |
-| Transaction with unlinked phone | `404` | Reply: "Conta não vinculada. Use o app para vincular seu WhatsApp." |
+| Scenario | `errorCode` | HTTP | n8n reply |
+|---|---|---|---|
+| Code not found | `CODE_NOT_FOUND` | `404` | "Código inválido." |
+| Code expired | `CODE_EXPIRED` | `410` | "Código expirado. Gere um novo no app." |
+| Code already used | `CODE_ALREADY_USED` | `422` | "Código já utilizado." |
+| Phone already linked elsewhere | `PHONE_ALREADY_LINKED` | `409` | "Número já vinculado a outra conta." |
+| User already has phone linked | `ALREADY_LINKED` | `409` | (both generate and confirm endpoints — app/n8n handles this) |
+| Transaction with unlinked phone | `PHONE_NOT_LINKED` | `404` | "Conta não vinculada. Use o app para vincular seu WhatsApp." |
+
+---
+
+## Security Notes
+
+- Code format `PIGGY-XXXXXX` (6 digits) = 1,000,000 combinations. Combined with 15-minute expiry and single-use enforcement, brute-force is not practical in the intended use context.
+- The confirm endpoint is protected by API Key — only n8n can call it, limiting the attack surface.
 
 ---
 
@@ -174,3 +203,4 @@ ELSE
 - Frontend (app) screen for the linking flow — this spec covers the backend and n8n contract only.
 - Unlinking / changing phone number — future work.
 - Multiple phone numbers per account — not needed now.
+- Formal rate limiting middleware — acceptable given API Key restriction and single-active-code-per-user rule.

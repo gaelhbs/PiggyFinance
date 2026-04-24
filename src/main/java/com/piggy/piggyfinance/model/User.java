@@ -35,4 +35,7 @@ public class User {
     @NotNull
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "phone_number", unique = true)
+    private String phoneNumber;
 }

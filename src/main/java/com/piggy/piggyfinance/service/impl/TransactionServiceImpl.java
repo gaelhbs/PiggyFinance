@@ -3,6 +3,7 @@ package com.piggy.piggyfinance.service.impl;
 import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.factory.TransactionFactory;
 import com.piggy.piggyfinance.mappers.TransactionMapper;
@@ -59,10 +60,11 @@ public class TransactionServiceImpl implements TransactionService {
     public TransactionResponse createWhatsAppTransaction(CreateWhatsAppTransactionRequest request) {
         validate(request.amount(), request.type(), request.category());
 
-        log.info("Creating WhatsApp transaction for user email: {}", request.userEmail());
+        log.info("Creating WhatsApp transaction for phone: {}", request.phoneNumber());
 
-        User user = userRepository.findByEmail(request.userEmail())
-                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + request.userEmail()));
+        User user = userRepository.findByPhoneNumber(request.phoneNumber())
+                .orElseThrow(() -> new PhoneNotLinkedException(
+                        "No account linked to this phone number. Please link your WhatsApp in the app."));
 
         CreateTransactionRequest transactionRequest = new CreateTransactionRequest(
                 request.description(), request.amount(), request.type(), request.category()

@@ -20,7 +20,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
-    private static final String WHATSAPP_PATH = "/api/v1/transactions/whatsapp";
+    private static final List<String> API_KEY_PATHS = List.of(
+            "/api/v1/transactions/whatsapp",
+            "/api/v1/users/whatsapp/link/confirm"
+    );
     private static final String API_KEY_HEADER = "X-Api-Key";
 
     @Value("${api.key}")
@@ -28,7 +31,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !WHATSAPP_PATH.equals(request.getRequestURI());
+        return !API_KEY_PATHS.contains(request.getRequestURI());
     }
 
     @Override

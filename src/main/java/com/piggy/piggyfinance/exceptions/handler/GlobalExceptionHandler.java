@@ -1,9 +1,7 @@
 package com.piggy.piggyfinance.exceptions.handler;
 
-import com.piggy.piggyfinance.exceptions.BusinessException;
-import com.piggy.piggyfinance.exceptions.EmailAlreadyExistsException;
-import com.piggy.piggyfinance.exceptions.UnauthorizedException;
-import com.piggy.piggyfinance.exceptions.UserNotFoundException;
+import com.piggy.piggyfinance.exceptions.*;
+
 import com.piggy.piggyfinance.model.responses.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -59,6 +57,54 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("VALIDATION_ERROR", details));
+    }
+
+    @ExceptionHandler(WhatsAppCodeNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleWhatsAppCodeNotFound(WhatsAppCodeNotFoundException ex) {
+        log.warn("WhatsApp code not found: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("CODE_NOT_FOUND", ex.getMessage()));
+    }
+
+    @ExceptionHandler(WhatsAppCodeExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleWhatsAppCodeExpired(WhatsAppCodeExpiredException ex) {
+        log.warn("WhatsApp code expired: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.GONE)
+                .body(ErrorResponse.of("CODE_EXPIRED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(WhatsAppCodeAlreadyUsedException.class)
+    public ResponseEntity<ErrorResponse> handleWhatsAppCodeAlreadyUsed(WhatsAppCodeAlreadyUsedException ex) {
+        log.warn("WhatsApp code already used: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ErrorResponse.of("CODE_ALREADY_USED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(PhoneAlreadyLinkedException.class)
+    public ResponseEntity<ErrorResponse> handlePhoneAlreadyLinked(PhoneAlreadyLinkedException ex) {
+        log.warn("Phone already linked: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("PHONE_ALREADY_LINKED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(AccountAlreadyLinkedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountAlreadyLinked(AccountAlreadyLinkedException ex) {
+        log.warn("Account already linked: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("ALREADY_LINKED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(PhoneNotLinkedException.class)
+    public ResponseEntity<ErrorResponse> handlePhoneNotLinked(PhoneNotLinkedException ex) {
+        log.warn("Phone not linked: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("PHONE_NOT_LINKED", ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

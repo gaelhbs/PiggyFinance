@@ -81,16 +81,20 @@ This document defines the granular task breakdown for migrating the frontend to 
 **DB migration V6:**
 ```sql
 CREATE TABLE goals (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id       UUID NOT NULL REFERENCES users(id),
-    name          VARCHAR(100) NOT NULL,
-    target_amount NUMERIC(12,2) NOT NULL,
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID NOT NULL REFERENCES users(id),
+    name           VARCHAR(100) NOT NULL,
+    target_amount  NUMERIC(12,2) NOT NULL,
     current_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
-    icon          VARCHAR(10) NOT NULL DEFAULT '🎯',
-    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    icon           VARCHAR(10) NOT NULL DEFAULT '🎯',
+    created_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_goals_user_id ON goals(user_id);
 ```
+
+**Goals list — no pagination.** Goals are returned as a flat `List<GoalResponse>` (no `Page<>`). Rationale: users are not expected to have hundreds of goals; a flat list simplifies the Flutter UI. If scale requires it, pagination can be added in a future milestone.
+
+**Status and deadline — out of scope for this migration.** Goal completion is derived from `currentAmount >= targetAmount` at read time; no explicit `status` column is stored. Deadline is not supported in this milestone — the UI shows a progress bar only. Both can be added post-launch.
 
 ---
 
@@ -99,11 +103,14 @@ CREATE INDEX idx_goals_user_id ON goals(user_id);
 The Jira-compatible CSV is located at:
 `docs/piggyfinance-flutter-migration-jira.csv`
 
-**Import instructions:**
-1. In Jira: Settings → System → External System Import → CSV
-2. Map columns: Summary, Issue Type, Priority, Description, Story Points, Sprint, Epic Name, Epic Link
-3. Epics are imported first (Issue Type = Epic). Stories/Tasks reference epics via the Epic Link column (matched by Epic Summary name).
-4. Sprint names will be auto-created if they don't exist in the project.
+**Import instructions (Jira Cloud):**
+1. Open your Jira project → Backlog view → click **"..."** (more actions) → **"Import issues"** → **"From CSV"**. (Alternative: top nav → **Your Work** → **Import**.)
+2. Upload `piggyfinance-flutter-migration-jira.csv` and follow the field-mapping wizard.
+3. Map columns: Summary, Issue Type, Priority, Description, Story Points, Sprint, Epic Name, Epic Link.
+4. Import **Epics first** in a separate pass (filter rows where Issue Type = Epic), then import Stories/Tasks. This ensures Epic keys exist before Epic Link resolution.
+5. Sprint names will be auto-created if they don't exist in the project board.
+
+> **Note:** The path Settings → System → External System Import applies to **Jira Server/Data Center only**, not Jira Cloud.
 
 **Total issues:** 94 (9 Epics + 85 Stories/Tasks)
 
@@ -115,3 +122,12 @@ The Jira-compatible CSV is located at:
 - Categories management screen (stub, no backend)
 - Preferences screen (stub)
 - Push notifications
+- Goal deadlines and explicit status field (completion derived from `currentAmount >= targetAmount` at read time)
+
+---
+
+## Clarifications
+
+**Transaction categories (AddTransaction screen):** Categories are **hardcoded** in the Flutter app — same 9 values as the React app (Alimentação, Transporte, Moradia, Saúde, Educação, Lazer, Assinaturas, Viagens, Outros). No categories endpoint is called. The backend `CategoryType` enum already maps these values.
+
+**iOS build (Sprint 6):** The sprint task covers a local `flutter build ios --release --no-codesign` to verify the build compiles. Distributable `.ipa` production (Ad Hoc / TestFlight / App Store) requires an Apple Developer account and is **not in scope for this sprint** — it should be planned as a separate release task once the account is set up.

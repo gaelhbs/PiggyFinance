@@ -26,6 +26,7 @@ public class UserServiceImpl implements UserService {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
 
-        return new UserResponse(user.getId(), user.getName(), user.getEmail());
+        return new UserResponse(user.getId(), user.getName(), user.getEmail(),
+                user.getPhoneNumber() != null);
     }
 }

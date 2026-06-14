@@ -21,4 +21,6 @@ public interface TransactionService {
     Page<TransactionResponse> listTransactions(TransactionFilter filter, Pageable pageable, UUID userId);
 
     TransactionSummaryResponse getSummary(UUID userId, LocalDate startDate, LocalDate endDate);
+
+    void deleteTransaction(UUID transactionId, UUID userId);
 }

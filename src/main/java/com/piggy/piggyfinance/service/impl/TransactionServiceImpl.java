@@ -4,6 +4,7 @@ import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
 import com.piggy.piggyfinance.exceptions.BusinessException;
 import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
+import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.factory.TransactionFactory;
 import com.piggy.piggyfinance.mappers.TransactionMapper;
@@ -110,6 +111,17 @@ public class TransactionServiceImpl implements TransactionService {
         }
 
         return new TransactionSummaryResponse(totalIncome, totalExpense, totalIncome.subtract(totalExpense));
+    }
+
+    @Override
+    @Transactional
+    public void deleteTransaction(UUID transactionId, UUID userId) {
+        Transaction transaction = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new BusinessException("Transação não encontrada"));
+        if (!transaction.getUser().getId().equals(userId)) {
+            throw new UnauthorizedException("Acesso negado");
+        }
+        transactionRepository.delete(transaction);
     }
 
     private User findUserById(UUID userId) {

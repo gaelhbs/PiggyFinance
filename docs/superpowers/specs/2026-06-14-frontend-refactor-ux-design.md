@@ -99,7 +99,7 @@ Mobile (< 768px)                   Desktop (≥ 1024px)
 - Search bar always visible above chips (not toggleable)
 - Date group headers: uppercase, `tracking-wide`, `text-muted-foreground/70`
 - Each transaction row: category icon, description, category label, date, amount
-- **Swipe-to-delete on mobile:** reveal delete button on left-swipe, confirm via toast with "Desfazer" (undo within 5s)
+- **Swipe-to-delete on mobile:** reveal delete button on left-swipe, confirm via toast with "Desfazer" (undo within 5s). Use `@use-gesture/react` for swipe detection (add to dependencies).
 - **Desktop:** wider layout shows all columns without truncation; hover reveals edit/delete actions on right
 
 ---
@@ -144,7 +144,7 @@ Mobile (< 768px)                   Desktop (≥ 1024px)
 **Desktop:** `grid-cols-1 md:grid-cols-2` for goal cards. Completed goals grouped at the bottom.
 
 **Available goal icons (Lucide, no emojis):**
-`Home`, `Car`, `Plane`, `Smartphone`, `GraduationCap`, `PiggyBank`, `Palmtree`, `Target`, `Bike`, `Heart`, `ShoppingBag`, `Laptop`
+`Home`, `Car`, `Plane`, `Smartphone`, `GraduationCap`, `PiggyBank`, `TreePalm`, `Target`, `Bike`, `Heart`, `ShoppingBag`, `Laptop`
 
 **Backend — New Spring Boot Endpoints:**
 
@@ -165,7 +165,7 @@ All endpoints are authenticated via JWT (existing `JwtAuthFilter`).
 - Only the owner can read/edit/delete their own goals (same pattern as transactions)
 - `PATCH /progress` adds the given `amount` to `currentAmount` (not a set operation)
 
-**DB migration:** New `V7__goals.sql` — creates `goals` table with indexes on `user_id`.
+**DB migration:** New `V7__goals.sql` — creates `goals` table with indexes on `user_id`. Verify no V7 exists before creating the file — if one has been added since this spec was written, increment the number accordingly.
 
 **Frontend service:** `goalsService.ts` — wraps all 5 endpoints using the existing Axios/fetch client. React Query hooks: `useGoals`, `useCreateGoal`, `useUpdateGoal`, `useDeleteGoal`, `useAddGoalProgress`.
 
@@ -211,7 +211,7 @@ Apply global polish only:
 | Responsive max-width | Pages use `max-w-5xl` via `AppLayout`; forms use inner `max-w-md` |
 | Icons | Only `lucide-react` — no custom SVG inline, no emoji, no `CategoryIcon` custom component |
 | Dark mode | All new components must work in both light and dark mode using existing CSS variables |
-| No `max-w-md mx-auto` per-page | Removed from all page roots — handled exclusively by `AppLayout` |
+| No `max-w-md mx-auto` per-page | Removed from all page roots **and from the root `<div>` in `App.tsx` (line 64)** — handled exclusively by `AppLayout` |
 | Toast confirmations | Destructive actions (delete transaction, delete goal) use toast with undo, not an AlertDialog |
 
 ---

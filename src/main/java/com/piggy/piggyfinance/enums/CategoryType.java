@@ -1,6 +1,7 @@
 package com.piggy.piggyfinance.enums;
 
 public enum CategoryType {
+    // Expense categories
     FOOD,
     TRANSPORT,
     RENT,
@@ -9,5 +10,10 @@ public enum CategoryType {
     LEISURE,
     SUBSCRIPTIONS,
     TRAVEL,
-    OTHER
+    OTHER,
+    // Income categories
+    SALARY,
+    FREELANCE,
+    INVESTMENT,
+    GIFT
 }

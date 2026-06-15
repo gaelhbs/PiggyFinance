@@ -58,4 +58,11 @@ public class TransactionController {
             @AuthenticationPrincipal UUID userId) {
         return transactionService.getSummary(userId, startDate, endDate);
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id,
+                       @AuthenticationPrincipal UUID userId) {
+        transactionService.deleteTransaction(id, userId);
+    }
 }

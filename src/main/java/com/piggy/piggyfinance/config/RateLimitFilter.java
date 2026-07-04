@@ -19,7 +19,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final List<String> RATE_LIMITED_PATHS = List.of("/api/auth/login", "/api/auth/register");
+    private static final List<String> RATE_LIMITED_PATHS = List.of(
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/forgot-password",
+            "/api/v1/users/whatsapp/link/confirm"
+    );
     private static final int MAX_REQUESTS = 5;
     private static final long WINDOW_MS = 60_000;
 
@@ -59,10 +64,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
         return request.getRemoteAddr();
     }
 }

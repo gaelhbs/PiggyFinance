@@ -23,7 +23,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final int MAX_REQUESTS = 5;
     private static final long WINDOW_MS = 60_000;
 
-    private record RequestWindow(AtomicInteger count, long startTime) {}
+    private record RequestWindow(AtomicInteger count, long startTime, int observedCount) {}
 
     private final ConcurrentHashMap<String, RequestWindow> requestCounts = new ConcurrentHashMap<>();
 
@@ -41,13 +41,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         RequestWindow window = requestCounts.compute(key, (k, existing) -> {
             long now = Instant.now().toEpochMilli();
             if (existing == null || now - existing.startTime() > WINDOW_MS) {
-                return new RequestWindow(new AtomicInteger(1), now);
+                return new RequestWindow(new AtomicInteger(1), now, 1);
             }
-            existing.count().incrementAndGet();
-            return existing;
+            int newCount = existing.count().incrementAndGet();
+            return new RequestWindow(existing.count(), existing.startTime(), newCount);
         });
 
-        if (window.count().get() > MAX_REQUESTS) {
+        if (window.observedCount() > MAX_REQUESTS) {
             log.warn("Rate limit exceeded for IP: {}", clientIp);
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json");

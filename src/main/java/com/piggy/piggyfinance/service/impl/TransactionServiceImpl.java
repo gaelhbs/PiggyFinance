@@ -1,5 +1,6 @@
 package com.piggy.piggyfinance.service.impl;
 
+import com.piggy.piggyfinance.enums.CategoryType;
 import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
 import com.piggy.piggyfinance.exceptions.BusinessException;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Set;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -129,13 +131,33 @@ public class TransactionServiceImpl implements TransactionService {
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
     }
 
-    private void validate(BigDecimal amount, TransactionType type, Object category) {
+    private static final Set<CategoryType> EXPENSE_CATEGORIES = Set.of(
+            CategoryType.FOOD, CategoryType.TRANSPORT, CategoryType.RENT,
+            CategoryType.HEALTH, CategoryType.EDUCATION, CategoryType.LEISURE,
+            CategoryType.SUBSCRIPTIONS, CategoryType.TRAVEL, CategoryType.OTHER
+    );
+
+    private static final Set<CategoryType> INCOME_CATEGORIES = Set.of(
+            CategoryType.SALARY, CategoryType.FREELANCE,
+            CategoryType.INVESTMENT, CategoryType.GIFT
+    );
+
+    private void validate(BigDecimal amount, TransactionType type, CategoryType category) {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("Transaction amount must be greater than zero");
         }
 
         if (type == TransactionType.EXPENSE && category == null) {
             throw new BusinessException("Category is required for EXPENSE transactions");
+        }
+
+        if (category != null) {
+            Set<CategoryType> allowed = type == TransactionType.EXPENSE
+                    ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+            if (!allowed.contains(category)) {
+                throw new BusinessException(
+                        "Category " + category + " is not valid for " + type + " transactions");
+            }
         }
     }
 }

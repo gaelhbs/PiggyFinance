@@ -31,10 +31,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
-        log.info("Registering user with email: {}", request.email());
+        log.info("Registering new user");
 
         if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException("Email already registered: " + request.email());
+            throw new EmailAlreadyExistsException("Email already registered");
         }
 
         User user = User.builder()
@@ -52,7 +52,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
-        log.info("Login attempt for email: {}", request.email());
+        log.info("Login attempt received");
 
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));

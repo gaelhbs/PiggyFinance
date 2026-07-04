@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 
 @Slf4j
@@ -40,7 +42,9 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String providedKey = request.getHeader(API_KEY_HEADER);
 
-        if (apiKey.equals(providedKey)) {
+        if (providedKey != null && MessageDigest.isEqual(
+                apiKey.getBytes(StandardCharsets.UTF_8),
+                providedKey.getBytes(StandardCharsets.UTF_8))) {
             UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken("whatsapp-integration", null, List.of());
             SecurityContextHolder.getContext().setAuthentication(auth);

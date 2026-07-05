@@ -1,6 +1,7 @@
 package com.piggy.piggyfinance.controller;
 
 import com.piggy.piggyfinance.model.requests.ConfirmWhatsAppLinkRequest;
+import com.piggy.piggyfinance.model.requests.DeleteAccountRequest;
 import com.piggy.piggyfinance.model.responses.UserResponse;
 import com.piggy.piggyfinance.model.responses.WhatsAppLinkCodeResponse;
 import com.piggy.piggyfinance.service.UserService;
@@ -40,5 +41,13 @@ public class UserController {
     public Map<String, String> confirmWhatsAppLink(@RequestBody @Valid ConfirmWhatsAppLinkRequest request) {
         whatsAppLinkService.confirmLink(request.phoneNumber(), request.code());
         return Map.of("message", "Account linked successfully.");
+    }
+
+    @DeleteMapping("/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccount(@RequestBody @Valid DeleteAccountRequest request,
+                              Authentication authentication) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        userService.deleteAccount(userId, request.currentPassword());
     }
 }

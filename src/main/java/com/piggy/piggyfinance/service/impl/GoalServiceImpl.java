@@ -33,11 +33,17 @@ public class GoalServiceImpl implements GoalService {
     public GoalResponse create(CreateGoalRequest request, UUID userId) {
         User user = findUser(userId);
         BigDecimal initial = request.currentAmount() != null ? request.currentAmount() : BigDecimal.ZERO;
+        if (initial.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("O valor inicial não pode ser negativo");
+        }
+        if (initial.compareTo(request.targetAmount()) > 0) {
+            throw new BusinessException("O valor inicial não pode ser maior que o valor alvo");
+        }
         Goal goal = goalRepository.save(Goal.builder()
                 .user(user)
                 .name(request.name())
                 .targetAmount(request.targetAmount())
-                .currentAmount(initial.min(request.targetAmount()))
+                .currentAmount(initial)
                 .iconName(request.iconName())
                 .build());
         return toResponse(goal);

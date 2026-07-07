@@ -73,16 +73,35 @@ class GoalServiceImplTest {
     }
 
     @Test
-    void create_clampsInitialAmountToTarget() {
-        BigDecimal overAmount = new BigDecimal("99999");
-        Goal clamped = goal.toBuilder().currentAmount(new BigDecimal("50000")).build();
+    void create_throwsWhenInitialAmountExceedsTarget() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(goalRepository.save(any())).thenReturn(clamped);
 
-        CreateGoalRequest req = new CreateGoalRequest("Casa própria", new BigDecimal("50000"), overAmount, "Home");
-        service.create(req, userId);
+        CreateGoalRequest req = new CreateGoalRequest("Casa", new BigDecimal("50000"), new BigDecimal("50001"), "Home");
+        assertThatThrownBy(() -> service.create(req, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("não pode ser maior que o valor alvo");
+    }
 
-        verify(goalRepository).save(argThat(g -> g.getCurrentAmount().compareTo(new BigDecimal("50000")) == 0));
+    @Test
+    void create_throwsWhenInitialAmountIsNegative() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        CreateGoalRequest req = new CreateGoalRequest("Casa", new BigDecimal("50000"), new BigDecimal("-1"), "Home");
+        assertThatThrownBy(() -> service.create(req, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("não pode ser negativo");
+    }
+
+    @Test
+    void create_allowsInitialAmountEqualToTarget() {
+        Goal full = goal.toBuilder().currentAmount(new BigDecimal("50000")).build();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(goalRepository.save(any())).thenReturn(full);
+
+        CreateGoalRequest req = new CreateGoalRequest("Casa", new BigDecimal("50000"), new BigDecimal("50000"), "Home");
+        GoalResponse response = service.create(req, userId);
+
+        assertThat(response.currentAmount()).isEqualByComparingTo("50000");
     }
 
     @Test

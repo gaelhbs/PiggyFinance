@@ -53,6 +53,12 @@ public class GoalServiceImpl implements GoalService {
     @Transactional
     public GoalResponse update(UUID goalId, UpdateGoalRequest request, UUID userId) {
         Goal goal = findOwned(goalId, userId);
+        if (request.targetAmount().compareTo(goal.getCurrentAmount()) < 0) {
+            throw new BusinessException(
+                "O valor alvo não pode ser menor que o já investido (R$ " +
+                goal.getCurrentAmount().setScale(2, java.math.RoundingMode.HALF_UP)
+                                       .toPlainString().replace(".", ",") + ")");
+        }
         Goal updated = goalRepository.save(goal.toBuilder()
                 .name(request.name())
                 .targetAmount(request.targetAmount())

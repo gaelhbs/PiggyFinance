@@ -134,4 +134,28 @@ class GoalServiceImplTest {
 
         assertThat(response.name()).isEqualTo("Novo nome");
     }
+
+    @Test
+    void update_throwsWhenNewTargetBelowCurrentAmount() {
+        // goal: currentAmount=10000
+        when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(goal));
+
+        UpdateGoalRequest req = new UpdateGoalRequest("Casa", new BigDecimal("9999"), "Home");
+        assertThatThrownBy(() -> service.update(goalId, req, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("não pode ser menor que o já investido");
+    }
+
+    @Test
+    void update_allowsTargetEqualToCurrentAmount() {
+        // currentAmount=10000, new target=10000 → valid (goal becomes complete)
+        Goal updated = goal.toBuilder().targetAmount(new BigDecimal("10000")).build();
+        when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(goal));
+        when(goalRepository.save(any())).thenReturn(updated);
+
+        UpdateGoalRequest req = new UpdateGoalRequest("Casa", new BigDecimal("10000"), "Home");
+        GoalResponse response = service.update(goalId, req, userId);
+
+        assertThat(response.targetAmount()).isEqualByComparingTo("10000");
+    }
 }

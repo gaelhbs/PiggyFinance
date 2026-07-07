@@ -23,15 +23,18 @@ Metas concluídas (`currentAmount >= targetAmount`) não exibem menu de ações 
 ### Backend — `GoalServiceImpl`
 
 **`create`**
-- Se `currentAmount > targetAmount` → lança `BusinessException("O valor inicial não pode ser maior que o valor alvo")`
+- `targetAmount <= 0` e `amount` nulo já cobertos por `@Positive`/`@NotNull` no DTO → HTTP 400 (Bean Validation).
+- Se `currentAmount < 0` → `BusinessException("O valor inicial não pode ser negativo")` → HTTP 422.
+- Se `currentAmount > targetAmount` → `BusinessException("O valor inicial não pode ser maior que o valor alvo")` → HTTP 422.
 - Remove o `.min(targetAmount)` silencioso atual.
 
 **`update`**
-- Se novo `targetAmount < currentAmount` → lança `BusinessException("O valor alvo não pode ser menor que o já investido (R$ {currentAmount})")`
+- `targetAmount <= 0` coberto por validação no DTO (`@Positive`) → HTTP 400.
+- Se novo `targetAmount < currentAmount` → `BusinessException("O valor alvo não pode ser menor que o já investido (R$ {currentAmount})")` → HTTP 422.
 
 **`addProgress`**
-- Se `amount <= 0` → lança `BusinessException("O valor deve ser maior que zero")`
-- Se `currentAmount + amount > targetAmount` → lança `BusinessException("O valor excede o restante da meta (R$ {restante})")`
+- `amount <= 0` coberto por `@Positive` no DTO → HTTP 400 (Bean Validation, não requer guard no service).
+- Se `currentAmount + amount > targetAmount` → `BusinessException("O valor excede o restante da meta (R$ {restante})")` → HTTP 422.
 - Remove o `.min(targetAmount)` silencioso atual.
 
 Todas as `BusinessException` são mapeadas para HTTP 422 pelo `GlobalExceptionHandler` existente.
@@ -40,7 +43,8 @@ Todas as `BusinessException` são mapeadas para HTTP 422 pelo `GlobalExceptionHa
 
 **Metas concluídas — menu de ações**
 - Adicionar `DropdownMenu` com opções Editar e Apagar ao card de metas concluídas, igual ao card de in-progress.
-- Layout: `[nome] [⋮]` na linha superior; badge "Concluída" fica abaixo do nome como subtítulo.
+- Botão "Investir nesta meta" **não é exibido** em metas concluídas (restante = 0).
+- Layout: `[nome] [⋮]` na linha superior; badge "Concluída" como subtítulo.
 
 **Validação no formulário de edição**
 - Em `validate()`: se `parseFloat(targetAmount) < parseFloat(currentAmount)` → erro `"O valor alvo não pode ser menor que o já investido (R$ X)"`.
@@ -51,8 +55,8 @@ Todas as `BusinessException` são mapeadas para HTTP 422 pelo `GlobalExceptionHa
 - Não chama a API; exibe erro diretamente no campo.
 
 **Criação**
-- Sem mudança de UI (`currentAmount` não é editável no form).
-- Backend cobre o edge case via API direta.
+- Sem mudança de UI (`currentAmount` não é editável no form, sempre enviado como 0).
+- Erros 422 vindos da API de criação são exibidos via `toastError` (comportamento já existente em `handleCreate`).
 
 ---
 
@@ -60,16 +64,21 @@ Todas as `BusinessException` são mapeadas para HTTP 422 pelo `GlobalExceptionHa
 
 - Estrutura de endpoints (nenhum endpoint novo).
 - Schema do banco (nenhuma migration).
-- Fluxo de criação de metas.
-- Comportamento do `addGoalProgress` quando `currentAmount + amount == targetAmount` (completa normalmente).
+- Fluxo de criação de metas na UI.
+- Comportamento quando `currentAmount + amount == targetAmount` (completa normalmente).
 
 ---
 
 ## Critérios de aceite
 
-- [ ] Metas concluídas exibem menu Editar/Apagar.
-- [ ] Editar meta concluída com `targetAmount` original funciona normalmente.
-- [ ] Tentar baixar `targetAmount` abaixo do `currentAmount` mostra erro no form.
-- [ ] Aporte com valor maior que o restante mostra erro inline sem chamar a API.
-- [ ] API retorna 422 com mensagem clara para todos os casos inválidos.
-- [ ] API retorna 422 com mensagem clara quando `amount <= 0` no aporte.
+- [ ] Metas concluídas exibem menu `⋮` com Editar e Apagar.
+- [ ] Metas concluídas **não** exibem o botão "Investir nesta meta".
+- [ ] Editar meta concluída mantendo o `targetAmount` original salva com sucesso.
+- [ ] Tentar baixar `targetAmount` abaixo do `currentAmount` mostra erro no form e bloqueia o request.
+- [ ] Aporte com `amount > restante` mostra erro inline sem chamar a API.
+- [ ] `POST /goals` com `currentAmount > targetAmount` retorna 422.
+- [ ] `POST /goals` com `targetAmount <= 0` retorna 400 (Bean Validation).
+- [ ] `POST /goals` com `currentAmount < 0` retorna 422.
+- [ ] `PUT /goals/:id` com `targetAmount < currentAmount` retorna 422.
+- [ ] `PATCH /goals/:id/progress` com `amount <= 0` retorna 400 (Bean Validation).
+- [ ] `PATCH /goals/:id/progress` com `amount > restante` retorna 422.

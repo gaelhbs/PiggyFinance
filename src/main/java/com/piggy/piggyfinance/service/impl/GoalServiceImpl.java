@@ -1,5 +1,6 @@
 package com.piggy.piggyfinance.service.impl;
 
+import com.piggy.piggyfinance.exceptions.BusinessException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.model.Goal;
@@ -71,11 +72,15 @@ public class GoalServiceImpl implements GoalService {
     @Transactional
     public GoalResponse addProgress(UUID goalId, GoalProgressRequest request, UUID userId) {
         Goal goal = findOwned(goalId, userId);
-        BigDecimal newAmount = goal.getCurrentAmount()
-                .add(request.amount())
-                .min(goal.getTargetAmount());
+        BigDecimal remaining = goal.getTargetAmount().subtract(goal.getCurrentAmount());
+        if (request.amount().compareTo(remaining) > 0) {
+            throw new BusinessException(
+                "O valor excede o restante da meta (R$ " +
+                remaining.setScale(2, java.math.RoundingMode.HALF_UP)
+                         .toPlainString().replace(".", ",") + ")");
+        }
         Goal updated = goalRepository.save(goal.toBuilder()
-                .currentAmount(newAmount)
+                .currentAmount(goal.getCurrentAmount().add(request.amount()))
                 .build());
         return toResponse(updated);
     }

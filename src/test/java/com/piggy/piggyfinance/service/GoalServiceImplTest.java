@@ -1,5 +1,6 @@
 package com.piggy.piggyfinance.service;
 
+import com.piggy.piggyfinance.exceptions.BusinessException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.model.Goal;
 import com.piggy.piggyfinance.model.User;
@@ -93,12 +94,23 @@ class GoalServiceImplTest {
     }
 
     @Test
-    void addProgress_addsAmountAndClampsAtTarget() {
-        Goal updated = goal.toBuilder().currentAmount(new BigDecimal("50000")).build();
+    void addProgress_throwsWhenAmountExceedsRemaining() {
         when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(goal));
-        when(goalRepository.save(any())).thenReturn(updated);
 
-        GoalProgressRequest req = new GoalProgressRequest(new BigDecimal("99999"));
+        // goal: currentAmount=10000, targetAmount=50000, remaining=40000
+        GoalProgressRequest req = new GoalProgressRequest(new BigDecimal("40001"));
+        assertThatThrownBy(() -> service.addProgress(goalId, req, userId))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("excede o restante");
+    }
+
+    @Test
+    void addProgress_exactRemainingCompletes() {
+        Goal completed = goal.toBuilder().currentAmount(new BigDecimal("50000")).build();
+        when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(goal));
+        when(goalRepository.save(any())).thenReturn(completed);
+
+        GoalProgressRequest req = new GoalProgressRequest(new BigDecimal("40000"));
         GoalResponse response = service.addProgress(goalId, req, userId);
 
         assertThat(response.currentAmount()).isEqualByComparingTo("50000");

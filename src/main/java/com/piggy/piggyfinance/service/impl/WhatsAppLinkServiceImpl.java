@@ -88,6 +88,22 @@ public class WhatsAppLinkServiceImpl implements WhatsAppLinkService {
         log.info("WhatsApp phone {} linked to user {}", phoneNumber, owner.getId());
     }
 
+    @Override
+    @Transactional
+    public void unlinkWhatsApp(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        if (user.getPhoneNumber() == null) {
+            throw new PhoneNotLinkedException("This account has no WhatsApp number linked.");
+        }
+
+        userRepository.save(user.toBuilder().phoneNumber(null).build());
+        linkCodeRepository.deleteAllByUserId(userId);
+
+        log.info("WhatsApp unlinked for user {}", userId);
+    }
+
     private String generateUniqueCode() {
         String candidate;
         do {

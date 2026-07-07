@@ -43,6 +43,13 @@ public class UserController {
         return Map.of("message", "Account linked successfully.");
     }
 
+    @DeleteMapping("/whatsapp/link")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unlinkWhatsApp(Authentication authentication) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        whatsAppLinkService.unlinkWhatsApp(userId);
+    }
+
     @DeleteMapping("/me")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAccount(@RequestBody @Valid DeleteAccountRequest request,

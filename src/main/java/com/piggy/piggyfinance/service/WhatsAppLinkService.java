@@ -9,4 +9,6 @@ public interface WhatsAppLinkService {
     WhatsAppLinkCodeResponse generateCode(UUID userId);
 
     void confirmLink(String phoneNumber, String code);
+
+    void unlinkWhatsApp(UUID userId);
 }

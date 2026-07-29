@@ -115,6 +115,13 @@ public class StripeGatewayImpl implements StripeGateway {
             StripeObject object = event.getDataObjectDeserializer().getObject().orElse(null);
             String type = event.getType();
 
+            if (object == null && (type.equals("checkout.session.completed")
+                    || type.equals("customer.subscription.updated")
+                    || type.equals("customer.subscription.deleted")
+                    || type.equals("invoice.payment_failed"))) {
+                throw new BusinessException("Unable to deserialize Stripe webhook payload for event type: " + type);
+            }
+
             return switch (type) {
                 case "checkout.session.completed" -> {
                     Session session = (Session) object;

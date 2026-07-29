@@ -3,7 +3,9 @@ package com.piggy.piggyfinance.service.impl;
 import com.piggy.piggyfinance.enums.CategoryType;
 import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import com.piggy.piggyfinance.enums.TransactionType;
+import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.exceptions.FeatureLockedException;
 import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
@@ -19,6 +21,7 @@ import com.piggy.piggyfinance.model.responses.TransactionSummaryResponse;
 import com.piggy.piggyfinance.repository.TransactionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.repository.specifications.TransactionSpecification;
+import com.piggy.piggyfinance.service.EntitlementService;
 import com.piggy.piggyfinance.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,11 +46,27 @@ public class TransactionServiceImpl implements TransactionService {
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final TransactionMapper transactionMapper;
+    private final EntitlementService entitlementService;
+
+    private static final int FREE_MONTHLY_TRANSACTION_LIMIT = 15;
 
     @Override
     @Transactional
     public TransactionResponse createTransaction(CreateTransactionRequest request, TransactionSourceEnum source, UUID userId) {
         validate(request.amount(), request.type(), request.category());
+
+        if (source == TransactionSourceEnum.APP
+                && entitlementService.getEffectiveTier(userId) == SubscriptionTier.FREE) {
+            LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+            LocalDateTime monthEnd = LocalDate.now().atTime(LocalTime.MAX);
+            long used = transactionRepository.countByUserIdAndTimestampBetween(userId, monthStart, monthEnd);
+            if (used >= FREE_MONTHLY_TRANSACTION_LIMIT) {
+                throw new FeatureLockedException(
+                        "O plano Free permite até " + FREE_MONTHLY_TRANSACTION_LIMIT
+                                + " transações por mês. Faça upgrade para continuar.",
+                        SubscriptionTier.ESSENCIAL);
+            }
+        }
 
         log.info("Creating {} transaction for user {}", source, userId);
 
@@ -68,6 +87,8 @@ public class TransactionServiceImpl implements TransactionService {
         User user = userRepository.findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new PhoneNotLinkedException(
                         "No account linked to this phone number. Please link your WhatsApp in the app."));
+
+        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
 
         CreateTransactionRequest transactionRequest = new CreateTransactionRequest(
                 request.description(), request.amount(), request.type(), request.category()

@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface GoalRepository extends JpaRepository<Goal, UUID> {
     List<Goal> findByUserIdOrderByCreatedAtAsc(UUID userId);
     Optional<Goal> findByIdAndUserId(UUID id, UUID userId);
+    long countByUserId(UUID userId);
 }

@@ -34,6 +34,11 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
             @Param("end") LocalDateTime end
     );
 
+    @Query("SELECT COUNT(t) FROM Transaction t WHERE t.user.id = :userId AND t.timestamp BETWEEN :start AND :end")
+    long countByUserIdAndTimestampBetween(@Param("userId") UUID userId,
+                                          @Param("start") LocalDateTime start,
+                                          @Param("end") LocalDateTime end);
+
     @Modifying
     @Query("DELETE FROM Transaction t WHERE t.user.id = :userId")
     void deleteAllByUserId(@Param("userId") UUID userId);

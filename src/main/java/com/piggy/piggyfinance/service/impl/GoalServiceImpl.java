@@ -1,6 +1,8 @@
 package com.piggy.piggyfinance.service.impl;
 
+import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.exceptions.FeatureLockedException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.model.Goal;
@@ -11,6 +13,7 @@ import com.piggy.piggyfinance.model.requests.UpdateGoalRequest;
 import com.piggy.piggyfinance.model.responses.GoalResponse;
 import com.piggy.piggyfinance.repository.GoalRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
+import com.piggy.piggyfinance.service.EntitlementService;
 import com.piggy.piggyfinance.service.GoalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,10 +30,19 @@ public class GoalServiceImpl implements GoalService {
 
     private final GoalRepository goalRepository;
     private final UserRepository userRepository;
+    private final EntitlementService entitlementService;
+
+    private static final long FREE_GOAL_LIMIT = 1;
 
     @Override
     @Transactional
     public GoalResponse create(CreateGoalRequest request, UUID userId) {
+        if (entitlementService.getEffectiveTier(userId) == SubscriptionTier.FREE
+                && goalRepository.countByUserId(userId) >= FREE_GOAL_LIMIT) {
+            throw new FeatureLockedException(
+                    "O plano Free permite apenas 1 meta. Faça upgrade para criar mais.",
+                    SubscriptionTier.ESSENCIAL);
+        }
         User user = findUser(userId);
         BigDecimal initial = request.currentAmount() != null ? request.currentAmount() : BigDecimal.ZERO;
         if (initial.compareTo(BigDecimal.ZERO) < 0) {

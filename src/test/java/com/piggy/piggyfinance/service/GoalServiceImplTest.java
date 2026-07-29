@@ -33,6 +33,7 @@ class GoalServiceImplTest {
 
     @Mock GoalRepository goalRepository;
     @Mock UserRepository userRepository;
+    @Mock com.piggy.piggyfinance.service.EntitlementService entitlementService;
     @InjectMocks GoalServiceImpl service;
 
     private UUID userId;
@@ -176,5 +177,35 @@ class GoalServiceImplTest {
         GoalResponse response = service.update(goalId, req, userId);
 
         assertThat(response.targetAmount()).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    void create_freeUserWithExistingGoal_throwsFeatureLocked() {
+        when(entitlementService.getEffectiveTier(userId))
+                .thenReturn(com.piggy.piggyfinance.enums.SubscriptionTier.FREE);
+        when(goalRepository.countByUserId(userId)).thenReturn(1L);
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateGoalRequest(
+                "Viagem", new java.math.BigDecimal("1000"), null, "plane");
+
+        assertThatThrownBy(() -> service.create(req, userId))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
+        verify(goalRepository, never()).save(any());
+    }
+
+    @Test
+    void create_paidUser_skipsGoalCap() {
+        when(entitlementService.getEffectiveTier(userId))
+                .thenReturn(com.piggy.piggyfinance.enums.SubscriptionTier.PRO);
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+        com.piggy.piggyfinance.model.Goal g = mock(com.piggy.piggyfinance.model.Goal.class);
+        when(goalRepository.save(any())).thenReturn(g);
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateGoalRequest(
+                "Viagem", new java.math.BigDecimal("1000"), null, "plane");
+
+        service.create(req, userId);
+        verify(goalRepository).save(any());
+        verify(goalRepository, never()).countByUserId(any());
     }
 }

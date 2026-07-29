@@ -3,6 +3,7 @@ package com.piggy.piggyfinance.exceptions.handler;
 import com.piggy.piggyfinance.exceptions.*;
 
 import com.piggy.piggyfinance.model.responses.ErrorResponse;
+import com.piggy.piggyfinance.model.responses.FeatureLockedResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -105,6 +106,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("PHONE_NOT_LINKED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(FeatureLockedException.class)
+    public ResponseEntity<FeatureLockedResponse> handleFeatureLocked(FeatureLockedException ex) {
+        log.warn("Feature locked: {} (requires {})", ex.getMessage(), ex.getRequiredTier());
+        return ResponseEntity
+                .status(HttpStatus.PAYMENT_REQUIRED)
+                .body(FeatureLockedResponse.of(ex.getMessage(), ex.getRequiredTier()));
     }
 
     @ExceptionHandler(Exception.class)

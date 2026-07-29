@@ -295,7 +295,7 @@ Stripe é mockado nos unitários (o SDK é isolado atrás de `StripeService`/gat
 - `service/impl/TransactionServiceImpl.java` — gate Pro no WhatsApp + limite Free/mês no app
 - `service/impl/GoalServiceImpl.java` — limite de 1 meta no Free
 - `repository/TransactionRepository.java` — contagem mensal
-- `repository/GoalRepository.java` — contagem de metas ativas
+- `repository/GoalRepository.java` — contagem total de metas (`countByUserId`)
 - `config/SecurityConfig.java` — rotas públicas de billing
 - `config/RateLimitFilter.java` — inclui `activate`
 - `exceptions/handler/GlobalExceptionHandler.java` — handler `FeatureLockedException` → 402

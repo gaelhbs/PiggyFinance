@@ -30,7 +30,7 @@ Três tiers permanentes. A IA do WhatsApp é exclusiva do Pro.
 |---|:---:|:---:|:---:|
 | Ver histórico (read) | ✅ | ✅ | ✅ |
 | Criar transações no app | ≤ 15 / mês | ilimitado | ilimitado |
-| Metas ativas | 1 | ilimitado | ilimitado |
+| Metas (total) | 1 | ilimitado | ilimitado |
 | Relatórios | ❌ | ✅ | ✅ |
 | IA no WhatsApp | ❌ | ❌ | ✅ |
 
@@ -80,6 +80,8 @@ CREATE INDEX idx_subscriptions_stripe_customer  ON subscriptions(stripe_customer
 ### Entidade `Subscription` (`model/Subscription.java`)
 
 JPA `@Entity` mapeando a tabela acima, seguindo o padrão das entidades existentes (Lombok `@Getter`/`@Builder(toBuilder = true)`, construtores protegidos, `@PrePersist`/`@PreUpdate` para `createdAt`/`updatedAt`). `@OneToOne(fetch = LAZY)` para `User`.
+
+**Tipo de tempo:** os campos temporais (`trial_ends_at`, `current_period_end`, `created_at`, `updated_at`) usam `OffsetDateTime` na entidade e nos parâmetros de query, mapeando para `TIMESTAMPTZ` — mesmo padrão da entidade mais recente sensível a tempo, `PasswordResetToken` (V8). Manter esse tipo de forma consistente entre entidade e repositório (o parâmetro `now` de `findExpired` também é `OffsetDateTime`).
 
 ### Repositório `SubscriptionRepository`
 
@@ -191,15 +193,15 @@ Os pontos protegidos chamam `EntitlementService`. Nenhuma regra de tier fica esp
 | IA WhatsApp exige **Pro** | `TransactionServiceImpl.createWhatsAppTransaction` (após resolver o usuário por telefone) | Lança `FeatureLockedException(PRO)` → `402`, corpo com `requiredTier`, para o n8n responder "recurso Pro" |
 | Relatórios exigem **Essencial+** | endpoints/serviço de relatórios (subsistema futuro) — o gate já fica disponível via `requireTier` | `402 FEATURE_LOCKED` |
 | Transação no app: Free ≤ 15/mês | `TransactionServiceImpl.createTransaction` quando `source = APP` e tier resolvido = `FREE` | Conta transações do mês corrente do usuário; se ≥ 15 → `402 FEATURE_LOCKED` com mensagem de upgrade |
-| Metas: Free ≤ 1 ativa | `GoalServiceImpl` na criação, quando tier = `FREE` | Se já há 1 meta ativa → `402 FEATURE_LOCKED` |
+| Metas: Free ≤ 1 (total) | `GoalServiceImpl` na criação, quando tier = `FREE` | Se o usuário já tem ≥ 1 meta → `402 FEATURE_LOCKED` |
 
 - Contagem mensal de transações: nova query em `TransactionRepository` (`countByUserIdAndTimestampBetween` ou equivalente para o mês corrente).
-- Contagem de metas ativas: query em `GoalRepository`.
+- Contagem de metas: query `countByUserId` em `GoalRepository`. **Definição:** o limite do Free é sobre o **total de metas do usuário** (qualquer linha em `goals` conta) — não há noção de meta "ativa/concluída" porque a tabela `goals` (V7) não tem coluna de status, e adicioná-la está fora de escopo. Concluir uma meta **não** libera o slot; para criar outra, o usuário do Free precisa excluir a existente ou fazer upgrade.
 - O gate de Pro no WhatsApp roda **depois** da resolução do usuário por telefone e **antes** de persistir a transação.
 
 ### Novo exception + handler
 
-`FeatureLockedException extends RuntimeException` carregando o `requiredTier`. Novo handler em `GlobalExceptionHandler` → HTTP **402 Payment Required**, corpo `ErrorResponse.of("FEATURE_LOCKED", mensagem)` acrescido do tier exigido (estender `ErrorResponse` ou incluir o tier na mensagem — decidir no plano; preferência por campo estruturado).
+`FeatureLockedException extends RuntimeException` carregando o `requiredTier`. Novo handler em `GlobalExceptionHandler` → HTTP **402 Payment Required**. O corpo usa uma resposta de erro **estruturada** com um campo `requiredTier` legível por máquina (ex.: novo record `FeatureLockedResponse(code, message, requiredTier)` ou um campo adicional dedicado) — **não** dobrar o tier dentro da string `message`, porque o fluxo n8n precisa ler `requiredTier` programaticamente para responder "recurso Pro". O `ErrorResponse` de 3 campos existente permanece para os demais erros.
 
 ---
 
@@ -254,7 +256,7 @@ Unitários (Mockito, seguindo o padrão dos testes existentes em `service/`):
 - **`EntitlementServiceTest`** — matriz da resolução lazy: trial válido → PRO; trial vencido → FREE; ACTIVE sem período → tier; ACTIVE vencido → FREE; PAST_DUE dentro/fora do período; CANCELED → FREE; sem subscription → FREE. `hasAtLeast`/`requireTier`.
 - **`BillingServiceTest` / webhook handler** — cada evento (`checkout.session.completed`, `subscription.updated`, `subscription.deleted`, `invoice.payment_failed`) produz o estado correto; idempotência (mesmo `event.id` duas vezes → um único efeito); mapeamento Price → tier.
 - **`activate`** — idempotência (webhook antes/depois), sessão não paga rejeitada, reuso de `stripe_subscription_id` bloqueado.
-- **Gating** — `createWhatsAppTransaction` não-Pro lança `FeatureLockedException`; Free no 16º/mês bloqueia; Free com 2ª meta bloqueia; Essencial/Pro passam.
+- **Gating** — `createWhatsAppTransaction` não-Pro lança `FeatureLockedException`; Free no 16º/mês bloqueia; Free com 1 meta existente bloqueia a criação da 2ª; Essencial/Pro passam.
 - **`register`** — cria subscription `PRO/TRIALING/INTERNAL` com `trial_ends_at ≈ now+7d`.
 
 Stripe é mockado nos unitários (o SDK é isolado atrás de `StripeService`/gateway para permitir stub). Teste manual em **Stripe test mode** com o Stripe CLI para os webhooks.

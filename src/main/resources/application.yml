@@ -57,3 +57,12 @@ app:
   base-url: ${APP_BASE_URL:https://piggyfinance.cloud}
   mail:
     from: ${MAIL_FROM:noreply@piggyfinance.cloud}
+
+stripe:
+  secret-key: ${STRIPE_SECRET_KEY}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+  prices:
+    essencial-monthly: ${STRIPE_PRICE_ESSENCIAL_MONTHLY}
+    essencial-annual:  ${STRIPE_PRICE_ESSENCIAL_ANNUAL}
+    pro-monthly:       ${STRIPE_PRICE_PRO_MONTHLY}
+    pro-annual:        ${STRIPE_PRICE_PRO_ANNUAL}

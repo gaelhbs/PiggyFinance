@@ -1,12 +1,17 @@
 package com.piggy.piggyfinance.service.impl;
 
+import com.piggy.piggyfinance.enums.SubscriptionSource;
+import com.piggy.piggyfinance.enums.SubscriptionStatus;
+import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.EmailAlreadyExistsException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
+import com.piggy.piggyfinance.model.Subscription;
 import com.piggy.piggyfinance.model.User;
 import com.piggy.piggyfinance.model.requests.LoginRequest;
 import com.piggy.piggyfinance.model.requests.RegisterRequest;
 import com.piggy.piggyfinance.model.responses.LoginResponse;
 import com.piggy.piggyfinance.model.responses.RegisterResponse;
+import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.AuthService;
 import com.piggy.piggyfinance.service.JwtService;
@@ -17,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Slf4j
 @Service
@@ -25,6 +32,7 @@ import java.time.LocalDateTime;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
@@ -45,6 +53,15 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         User saved = userRepository.save(user);
+
+        subscriptionRepository.save(Subscription.builder()
+                .user(saved)
+                .tier(SubscriptionTier.PRO)
+                .status(SubscriptionStatus.TRIALING)
+                .source(SubscriptionSource.INTERNAL)
+                .trialEndsAt(OffsetDateTime.now(ZoneOffset.UTC).plusDays(7))
+                .cancelAtPeriodEnd(false)
+                .build());
 
         log.info("User registered successfully: {}", saved.getId());
         return new RegisterResponse(saved.getId(), saved.getEmail(), saved.getCreatedAt());

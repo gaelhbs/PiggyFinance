@@ -59,7 +59,7 @@ public class TransactionServiceImpl implements TransactionService {
                 && entitlementService.getEffectiveTier(userId) == SubscriptionTier.FREE) {
             LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
             LocalDateTime monthEnd = LocalDate.now().atTime(LocalTime.MAX);
-            long used = transactionRepository.countByUserIdAndTimestampBetween(userId, monthStart, monthEnd);
+            long used = transactionRepository.countAppTransactionsByUserIdAndTimestampBetween(userId, monthStart, monthEnd);
             if (used >= FREE_MONTHLY_TRANSACTION_LIMIT) {
                 throw new FeatureLockedException(
                         "O plano Free permite até " + FREE_MONTHLY_TRANSACTION_LIMIT

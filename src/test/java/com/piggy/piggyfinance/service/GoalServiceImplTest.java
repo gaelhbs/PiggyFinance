@@ -189,7 +189,9 @@ class GoalServiceImplTest {
                 "Viagem", new java.math.BigDecimal("1000"), null, "plane");
 
         assertThatThrownBy(() -> service.create(req, userId))
-                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class)
+                .satisfies(ex -> assertThat(((com.piggy.piggyfinance.exceptions.FeatureLockedException) ex).getRequiredTier())
+                        .isEqualTo(com.piggy.piggyfinance.enums.SubscriptionTier.ESSENCIAL));
         verify(goalRepository, never()).save(any());
     }
 

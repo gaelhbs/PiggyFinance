@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -138,7 +139,7 @@ class TransactionServiceImplTest {
     void createTransaction_freeUserUnderMonthlyLimit_succeeds() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(entitlementService.getEffectiveTier(userId)).thenReturn(SubscriptionTier.FREE);
-        when(transactionRepository.countByUserIdAndTimestampBetween(eq(userId), any(), any())).thenReturn(5L);
+        when(transactionRepository.countAppTransactionsByUserIdAndTimestampBetween(eq(userId), any(), any())).thenReturn(5L);
         Transaction tx = mock(Transaction.class);
         TransactionResponse resp = mock(TransactionResponse.class);
         when(transactionRepository.save(any())).thenReturn(tx);
@@ -154,13 +155,15 @@ class TransactionServiceImplTest {
     @Test
     void createTransaction_freeUserAtMonthlyLimit_throwsFeatureLocked() {
         when(entitlementService.getEffectiveTier(userId)).thenReturn(SubscriptionTier.FREE);
-        when(transactionRepository.countByUserIdAndTimestampBetween(eq(userId), any(), any())).thenReturn(15L);
+        when(transactionRepository.countAppTransactionsByUserIdAndTimestampBetween(eq(userId), any(), any())).thenReturn(15L);
 
         var req = new CreateTransactionRequest("Test", new BigDecimal("100"),
                 TransactionType.EXPENSE, CategoryType.FOOD);
 
         assertThatThrownBy(() -> service.createTransaction(req, TransactionSourceEnum.APP, userId))
-                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class)
+                .satisfies(ex -> assertThat(((com.piggy.piggyfinance.exceptions.FeatureLockedException) ex).getRequiredTier())
+                        .isEqualTo(SubscriptionTier.ESSENCIAL));
         verify(transactionRepository, never()).save(any());
     }
 
@@ -178,6 +181,6 @@ class TransactionServiceImplTest {
 
         service.createTransaction(req, TransactionSourceEnum.APP, userId);
         verify(transactionRepository).save(any());
-        verify(transactionRepository, never()).countByUserIdAndTimestampBetween(any(), any(), any());
+        verify(transactionRepository, never()).countAppTransactionsByUserIdAndTimestampBetween(any(), any(), any());
     }
 }

@@ -34,8 +34,13 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
             @Param("end") LocalDateTime end
     );
 
-    @Query("SELECT COUNT(t) FROM Transaction t WHERE t.user.id = :userId AND t.timestamp BETWEEN :start AND :end")
-    long countByUserIdAndTimestampBetween(@Param("userId") UUID userId,
+    @Query("""
+    SELECT COUNT(t) FROM Transaction t
+    WHERE t.user.id = :userId
+      AND t.timestamp BETWEEN :start AND :end
+      AND t.source = com.piggy.piggyfinance.enums.TransactionSourceEnum.APP
+""")
+    long countAppTransactionsByUserIdAndTimestampBetween(@Param("userId") UUID userId,
                                           @Param("start") LocalDateTime start,
                                           @Param("end") LocalDateTime end);
 

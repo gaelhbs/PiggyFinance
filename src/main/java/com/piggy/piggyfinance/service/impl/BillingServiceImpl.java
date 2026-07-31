@@ -194,7 +194,7 @@ public class BillingServiceImpl implements BillingService {
         Subscription existing = subscriptionRepository.findByUserId(user.getId()).orElse(null);
         Subscription.SubscriptionBuilder builder = existing != null
                 ? existing.toBuilder()
-                : Subscription.builder().user(user).cancelAtPeriodEnd(false);
+                : Subscription.builder().user(user);
 
         subscriptionRepository.save(builder
                 .tier(tier)

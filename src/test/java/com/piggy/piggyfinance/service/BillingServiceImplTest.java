@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -39,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -218,7 +220,11 @@ class BillingServiceImplTest {
         verify(subscriptionRepository).save(subCaptor.capture());
         assertThat(subCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         assertThat(subCaptor.getValue().getTier()).isEqualTo(SubscriptionTier.PRO);
+        verify(passwordResetTokenRepository).markAllUnusedByUserIdAsUsed(createdUser.getId());
         verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+        InOrder inOrder = inOrder(passwordResetTokenRepository);
+        inOrder.verify(passwordResetTokenRepository).markAllUnusedByUserIdAsUsed(createdUser.getId());
+        inOrder.verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
     }
 
     @Test
@@ -228,6 +234,16 @@ class BillingServiceImplTest {
         when(stripeGateway.retrieveCheckoutSession("cs_2")).thenReturn(checkout);
 
         assertThatThrownBy(() -> service.activate("cs_2"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void activate_nullCustomerEmail_throwsBusinessException() {
+        StripeCheckoutData checkout = new StripeCheckoutData(
+                "cs_4", "cus_4", "sub_4", null, null, true);
+        when(stripeGateway.retrieveCheckoutSession("cs_4")).thenReturn(checkout);
+
+        assertThatThrownBy(() -> service.activate("cs_4"))
                 .isInstanceOf(BusinessException.class);
     }
 

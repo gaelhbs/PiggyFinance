@@ -1,6 +1,8 @@
 package com.piggy.piggyfinance.controller;
 
+import com.piggy.piggyfinance.model.requests.ActivateRequest;
 import com.piggy.piggyfinance.model.requests.CheckoutRequest;
+import com.piggy.piggyfinance.model.responses.ActivateResponse;
 import com.piggy.piggyfinance.model.responses.CheckoutResponse;
 import com.piggy.piggyfinance.model.responses.PortalResponse;
 import com.piggy.piggyfinance.service.BillingService;
@@ -38,5 +40,11 @@ public class BillingController {
     public void webhook(@RequestBody String payload,
                         @RequestHeader("Stripe-Signature") String signature) {
         billingService.handleWebhook(payload, signature);
+    }
+
+    @PostMapping("/activate")
+    @ResponseStatus(HttpStatus.OK)
+    public ActivateResponse activate(@RequestBody @Valid ActivateRequest request) {
+        return billingService.activate(request.sessionId());
     }
 }

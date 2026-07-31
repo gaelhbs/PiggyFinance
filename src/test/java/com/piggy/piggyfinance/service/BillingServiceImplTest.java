@@ -5,13 +5,16 @@ import com.piggy.piggyfinance.enums.SubscriptionSource;
 import com.piggy.piggyfinance.enums.SubscriptionStatus;
 import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.model.PasswordResetToken;
 import com.piggy.piggyfinance.model.Subscription;
 import com.piggy.piggyfinance.model.User;
+import com.piggy.piggyfinance.model.responses.ActivateResponse;
 import com.piggy.piggyfinance.repository.PasswordResetTokenRepository;
 import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.impl.BillingServiceImpl;
 import com.piggy.piggyfinance.service.stripe.StripeGateway;
+import com.piggy.piggyfinance.service.stripe.dto.StripeCheckoutData;
 import com.piggy.piggyfinance.service.stripe.dto.StripeSubscriptionData;
 import com.piggy.piggyfinance.service.stripe.dto.StripeWebhookEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -190,5 +193,61 @@ class BillingServiceImplTest {
         service.handleWebhook("p", "s");
 
         verify(subscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    void activate_newEmail_createsUserSubscriptionAndSetupToken() {
+        StripeCheckoutData checkout = new StripeCheckoutData(
+                "cs_1", "cus_1", "sub_1", null, "novo@test.com", true);
+        when(stripeGateway.retrieveCheckoutSession("cs_1")).thenReturn(checkout);
+        when(stripeGateway.retrieveSubscription("sub_1")).thenReturn(new StripeSubscriptionData(
+                "sub_1", "cus_1", "price_pro", "active",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(30), false));
+        when(stripeProperties.tierForPriceId("price_pro")).thenReturn(SubscriptionTier.PRO);
+        when(userRepository.findByEmail("novo@test.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(any())).thenReturn("randomhash");
+        User createdUser = User.builder().id(UUID.randomUUID()).name("novo").email("novo@test.com")
+                .password("randomhash").createdAt(LocalDateTime.now()).build();
+        when(userRepository.save(any(User.class))).thenReturn(createdUser);
+        when(subscriptionRepository.findByUserId(createdUser.getId())).thenReturn(Optional.empty());
+
+        ActivateResponse resp = service.activate("cs_1");
+
+        assertThat(resp.email()).isEqualTo("novo@test.com");
+        assertThat(resp.setupToken()).isNotBlank();
+        verify(subscriptionRepository).save(subCaptor.capture());
+        assertThat(subCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(subCaptor.getValue().getTier()).isEqualTo(SubscriptionTier.PRO);
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+    }
+
+    @Test
+    void activate_unpaidSession_throwsBusinessException() {
+        StripeCheckoutData checkout = new StripeCheckoutData(
+                "cs_2", "cus_2", "sub_2", null, "x@test.com", false);
+        when(stripeGateway.retrieveCheckoutSession("cs_2")).thenReturn(checkout);
+
+        assertThatThrownBy(() -> service.activate("cs_2"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void activate_existingEmail_linksSubscriptionWithoutCreatingUser() {
+        StripeCheckoutData checkout = new StripeCheckoutData(
+                "cs_3", "cus_3", "sub_3", null, "gab@test.com", true);
+        when(stripeGateway.retrieveCheckoutSession("cs_3")).thenReturn(checkout);
+        when(stripeGateway.retrieveSubscription("sub_3")).thenReturn(new StripeSubscriptionData(
+                "sub_3", "cus_3", "price_ess", "active",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(30), false));
+        when(stripeProperties.tierForPriceId("price_ess")).thenReturn(SubscriptionTier.ESSENCIAL);
+        when(userRepository.findByEmail("gab@test.com")).thenReturn(Optional.of(user));
+        when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(trialSub()));
+
+        ActivateResponse resp = service.activate("cs_3");
+
+        assertThat(resp.email()).isEqualTo("gab@test.com");
+        verify(userRepository, never()).save(any(User.class));
+        verify(subscriptionRepository).save(subCaptor.capture());
+        assertThat(subCaptor.getValue().getTier()).isEqualTo(SubscriptionTier.ESSENCIAL);
     }
 }

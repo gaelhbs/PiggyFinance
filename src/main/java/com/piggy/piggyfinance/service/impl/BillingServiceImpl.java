@@ -5,6 +5,7 @@ import com.piggy.piggyfinance.enums.SubscriptionStatus;
 import com.piggy.piggyfinance.config.StripeProperties;
 import com.piggy.piggyfinance.exceptions.BusinessException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
+import com.piggy.piggyfinance.model.PasswordResetToken;
 import com.piggy.piggyfinance.model.Subscription;
 import com.piggy.piggyfinance.model.User;
 import com.piggy.piggyfinance.model.responses.ActivateResponse;
@@ -13,6 +14,7 @@ import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.BillingService;
 import com.piggy.piggyfinance.service.stripe.StripeGateway;
+import com.piggy.piggyfinance.service.stripe.dto.StripeCheckoutData;
 import com.piggy.piggyfinance.service.stripe.dto.StripeSubscriptionData;
 import com.piggy.piggyfinance.service.stripe.dto.StripeWebhookEvent;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Slf4j
@@ -160,9 +165,57 @@ public class BillingServiceImpl implements BillingService {
         };
     }
 
+    private static final int SETUP_TOKEN_EXPIRY_MINUTES = 30;
+
     @Override
     @Transactional
     public ActivateResponse activate(String sessionId) {
-        throw new UnsupportedOperationException("Implemented in Task 9");
+        StripeCheckoutData checkout = stripeGateway.retrieveCheckoutSession(sessionId);
+        if (!checkout.paid()) {
+            throw new BusinessException("Checkout session is not paid");
+        }
+        if (checkout.customerEmail() == null) {
+            throw new BusinessException("Checkout session has no email");
+        }
+
+        StripeSubscriptionData sub = stripeGateway.retrieveSubscription(checkout.subscriptionId());
+        var tier = tierFor(sub);
+
+        User user = userRepository.findByEmail(checkout.customerEmail()).orElseGet(() -> {
+            String localPart = checkout.customerEmail().split("@")[0];
+            return userRepository.save(User.builder()
+                    .name(localPart)
+                    .email(checkout.customerEmail())
+                    .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        });
+
+        Subscription existing = subscriptionRepository.findByUserId(user.getId()).orElse(null);
+        Subscription.SubscriptionBuilder builder = existing != null
+                ? existing.toBuilder()
+                : Subscription.builder().user(user).cancelAtPeriodEnd(false);
+
+        subscriptionRepository.save(builder
+                .tier(tier)
+                .status(SubscriptionStatus.ACTIVE)
+                .source(SubscriptionSource.STRIPE)
+                .stripeCustomerId(checkout.customerId())
+                .stripeSubscriptionId(checkout.subscriptionId())
+                .currentPeriodEnd(sub.currentPeriodEnd())
+                .cancelAtPeriodEnd(sub.cancelAtPeriodEnd())
+                .build());
+
+        passwordResetTokenRepository.markAllUnusedByUserIdAsUsed(user.getId());
+        String setupToken = UUID.randomUUID().toString();
+        passwordResetTokenRepository.save(PasswordResetToken.builder()
+                .user(user)
+                .token(setupToken)
+                .expiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(SETUP_TOKEN_EXPIRY_MINUTES))
+                .used(false)
+                .build());
+
+        log.info("Activated subscription via LP for user {}", user.getId());
+        return new ActivateResponse(setupToken, user.getEmail());
     }
 }

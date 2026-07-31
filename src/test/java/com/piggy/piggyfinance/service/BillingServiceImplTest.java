@@ -12,9 +12,13 @@ import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.impl.BillingServiceImpl;
 import com.piggy.piggyfinance.service.stripe.StripeGateway;
+import com.piggy.piggyfinance.service.stripe.dto.StripeSubscriptionData;
+import com.piggy.piggyfinance.service.stripe.dto.StripeWebhookEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,6 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +50,7 @@ class BillingServiceImplTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock StripeProperties stripeProperties;
     @InjectMocks BillingServiceImpl service;
+    @Captor ArgumentCaptor<Subscription> subCaptor;
 
     private UUID userId;
     private User user;
@@ -113,5 +120,75 @@ class BillingServiceImplTest {
         when(stripeGateway.createPortalSession(eq("cus_9"), any())).thenReturn("https://portal/x");
 
         assertThat(service.createPortal(userId)).isEqualTo("https://portal/x");
+    }
+
+    @Test
+    void webhook_checkoutCompleted_activatesSubscriptionForUser() {
+        StripeSubscriptionData sub = new StripeSubscriptionData(
+                "sub_1", "cus_1", "price_pro", "active",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(30), false);
+        StripeWebhookEvent event = new StripeWebhookEvent(
+                "evt_1", "checkout.session.completed", userId.toString(), "gab@test.com", sub);
+        when(stripeGateway.parseWebhookEvent("payload", "sig")).thenReturn(event);
+        when(subscriptionRepository.findByUserId(userId)).thenReturn(Optional.of(trialSub()));
+        when(stripeProperties.tierForPriceId("price_pro")).thenReturn(SubscriptionTier.PRO);
+
+        service.handleWebhook("payload", "sig");
+
+        verify(subscriptionRepository).save(subCaptor.capture());
+        Subscription saved = subCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(saved.getTier()).isEqualTo(SubscriptionTier.PRO);
+        assertThat(saved.getSource()).isEqualTo(SubscriptionSource.STRIPE);
+        assertThat(saved.getStripeSubscriptionId()).isEqualTo("sub_1");
+    }
+
+    @Test
+    void webhook_subscriptionUpdatedPastDue_setsPastDue() {
+        StripeSubscriptionData sub = new StripeSubscriptionData(
+                "sub_1", "cus_1", "price_pro", "past_due",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(5), false);
+        StripeWebhookEvent event = new StripeWebhookEvent(
+                "evt_2", "customer.subscription.updated", null, null, sub);
+        when(stripeGateway.parseWebhookEvent("p", "s")).thenReturn(event);
+        Subscription existing = trialSub().toBuilder()
+                .status(SubscriptionStatus.ACTIVE).source(SubscriptionSource.STRIPE)
+                .stripeSubscriptionId("sub_1").build();
+        when(subscriptionRepository.findByStripeSubscriptionId("sub_1")).thenReturn(Optional.of(existing));
+        when(stripeProperties.tierForPriceId("price_pro")).thenReturn(SubscriptionTier.PRO);
+
+        service.handleWebhook("p", "s");
+
+        verify(subscriptionRepository).save(subCaptor.capture());
+        assertThat(subCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.PAST_DUE);
+    }
+
+    @Test
+    void webhook_subscriptionDeleted_setsCanceled() {
+        StripeSubscriptionData sub = new StripeSubscriptionData(
+                "sub_1", "cus_1", "price_pro", "canceled", null, false);
+        StripeWebhookEvent event = new StripeWebhookEvent(
+                "evt_3", "customer.subscription.deleted", null, null, sub);
+        when(stripeGateway.parseWebhookEvent("p", "s")).thenReturn(event);
+        Subscription existing = trialSub().toBuilder()
+                .status(SubscriptionStatus.ACTIVE).source(SubscriptionSource.STRIPE)
+                .stripeSubscriptionId("sub_1").build();
+        when(subscriptionRepository.findByStripeSubscriptionId("sub_1")).thenReturn(Optional.of(existing));
+
+        service.handleWebhook("p", "s");
+
+        verify(subscriptionRepository).save(subCaptor.capture());
+        assertThat(subCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.CANCELED);
+    }
+
+    @Test
+    void webhook_unhandledType_isIgnored() {
+        StripeWebhookEvent event = new StripeWebhookEvent(
+                "evt_4", "customer.created", null, null, null);
+        when(stripeGateway.parseWebhookEvent("p", "s")).thenReturn(event);
+
+        service.handleWebhook("p", "s");
+
+        verify(subscriptionRepository, never()).save(any());
     }
 }

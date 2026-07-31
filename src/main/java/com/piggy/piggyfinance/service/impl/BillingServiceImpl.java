@@ -13,6 +13,8 @@ import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.BillingService;
 import com.piggy.piggyfinance.service.stripe.StripeGateway;
+import com.piggy.piggyfinance.service.stripe.dto.StripeSubscriptionData;
+import com.piggy.piggyfinance.service.stripe.dto.StripeWebhookEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -83,7 +85,79 @@ public class BillingServiceImpl implements BillingService {
     @Override
     @Transactional
     public void handleWebhook(String payload, String signatureHeader) {
-        throw new UnsupportedOperationException("Implemented in Task 8");
+        StripeWebhookEvent event = stripeGateway.parseWebhookEvent(payload, signatureHeader);
+        log.info("Processing Stripe webhook {} ({})", event.id(), event.type());
+
+        switch (event.type()) {
+            case "checkout.session.completed" -> applyCheckoutCompleted(event);
+            case "customer.subscription.updated" -> applyStatusFromStripe(event);
+            case "customer.subscription.deleted" -> applyCanceled(event);
+            case "invoice.payment_failed" -> applyPastDue(event);
+            default -> log.debug("Ignoring unhandled Stripe event type: {}", event.type());
+        }
+    }
+
+    private void applyCheckoutCompleted(StripeWebhookEvent event) {
+        StripeSubscriptionData sub = event.subscription();
+        if (sub == null) return;
+        Subscription subscription = event.clientReferenceId() != null
+                ? subscriptionRepository.findByUserId(UUID.fromString(event.clientReferenceId())).orElse(null)
+                : subscriptionRepository.findByStripeCustomerId(sub.customerId()).orElse(null);
+        if (subscription == null) {
+            log.warn("checkout.session.completed for unknown user (event {})", event.id());
+            return;
+        }
+        subscriptionRepository.save(subscription.toBuilder()
+                .tier(tierFor(sub))
+                .status(SubscriptionStatus.ACTIVE)
+                .source(SubscriptionSource.STRIPE)
+                .stripeCustomerId(sub.customerId())
+                .stripeSubscriptionId(sub.subscriptionId())
+                .currentPeriodEnd(sub.currentPeriodEnd())
+                .cancelAtPeriodEnd(sub.cancelAtPeriodEnd())
+                .build());
+    }
+
+    private void applyStatusFromStripe(StripeWebhookEvent event) {
+        StripeSubscriptionData sub = event.subscription();
+        if (sub == null) return;
+        subscriptionRepository.findByStripeSubscriptionId(sub.subscriptionId()).ifPresent(s ->
+                subscriptionRepository.save(s.toBuilder()
+                        .tier(tierFor(sub))
+                        .status(mapStatus(sub.status()))
+                        .currentPeriodEnd(sub.currentPeriodEnd())
+                        .cancelAtPeriodEnd(sub.cancelAtPeriodEnd())
+                        .build()));
+    }
+
+    private void applyCanceled(StripeWebhookEvent event) {
+        StripeSubscriptionData sub = event.subscription();
+        if (sub == null) return;
+        subscriptionRepository.findByStripeSubscriptionId(sub.subscriptionId()).ifPresent(s ->
+                subscriptionRepository.save(s.toBuilder().status(SubscriptionStatus.CANCELED).build()));
+    }
+
+    private void applyPastDue(StripeWebhookEvent event) {
+        StripeSubscriptionData sub = event.subscription();
+        if (sub == null) return;
+        subscriptionRepository.findByStripeSubscriptionId(sub.subscriptionId()).ifPresent(s ->
+                subscriptionRepository.save(s.toBuilder().status(SubscriptionStatus.PAST_DUE).build()));
+    }
+
+    private com.piggy.piggyfinance.enums.SubscriptionTier tierFor(StripeSubscriptionData sub) {
+        com.piggy.piggyfinance.enums.SubscriptionTier tier = stripeProperties.tierForPriceId(sub.priceId());
+        return tier != null ? tier : com.piggy.piggyfinance.enums.SubscriptionTier.ESSENCIAL;
+    }
+
+    private SubscriptionStatus mapStatus(String stripeStatus) {
+        if (stripeStatus == null) return SubscriptionStatus.PAST_DUE;
+        return switch (stripeStatus) {
+            case "active" -> SubscriptionStatus.ACTIVE;
+            case "trialing" -> SubscriptionStatus.TRIALING;
+            case "past_due" -> SubscriptionStatus.PAST_DUE;
+            case "canceled", "unpaid", "incomplete_expired" -> SubscriptionStatus.CANCELED;
+            default -> SubscriptionStatus.PAST_DUE;
+        };
     }
 
     @Override

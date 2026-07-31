@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.util.UUID;
 
@@ -30,5 +31,12 @@ public class BillingController {
     @ResponseStatus(HttpStatus.OK)
     public PortalResponse portal(@AuthenticationPrincipal UUID userId) {
         return new PortalResponse(billingService.createPortal(userId));
+    }
+
+    @PostMapping("/webhook")
+    @ResponseStatus(HttpStatus.OK)
+    public void webhook(@RequestBody String payload,
+                        @RequestHeader("Stripe-Signature") String signature) {
+        billingService.handleWebhook(payload, signature);
     }
 }

@@ -105,13 +105,32 @@ public class BillingServiceImpl implements BillingService {
     private void applyCheckoutCompleted(StripeWebhookEvent event) {
         StripeSubscriptionData sub = event.subscription();
         if (sub == null) return;
+
         Subscription subscription = event.clientReferenceId() != null
                 ? subscriptionRepository.findByUserId(UUID.fromString(event.clientReferenceId())).orElse(null)
                 : subscriptionRepository.findByStripeCustomerId(sub.customerId()).orElse(null);
+
         if (subscription == null) {
-            log.warn("checkout.session.completed for unknown user (event {})", event.id());
-            return;
+            // Pre-account LP funnel backstop: create/resolve a provisional user by email,
+            // then upsert their subscription. No setup token is ever issued from the webhook.
+            if (event.customerEmail() == null) {
+                log.warn("checkout.session.completed for unknown user and no email (event {})", event.id());
+                return;
+            }
+            User user = userRepository.findByEmail(event.customerEmail()).orElseGet(() -> {
+                String localPart = event.customerEmail().split("@")[0];
+                return userRepository.save(User.builder()
+                        .name(localPart)
+                        .email(event.customerEmail())
+                        .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                        .createdAt(LocalDateTime.now())
+                        .provisional(true)
+                        .build());
+            });
+            subscription = subscriptionRepository.findByUserId(user.getId())
+                    .orElse(Subscription.builder().user(user).build());
         }
+
         subscriptionRepository.save(subscription.toBuilder()
                 .tier(tierFor(sub))
                 .status(SubscriptionStatus.ACTIVE)
@@ -188,6 +207,7 @@ public class BillingServiceImpl implements BillingService {
                     .email(checkout.customerEmail())
                     .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                     .createdAt(LocalDateTime.now())
+                    .provisional(true)
                     .build());
         });
 
@@ -206,6 +226,11 @@ public class BillingServiceImpl implements BillingService {
                 .cancelAtPeriodEnd(sub.cancelAtPeriodEnd())
                 .build());
 
+        if (!user.isProvisional()) {
+            log.info("Linked subscription to existing account {} via LP (no setup token issued)", user.getId());
+            return new ActivateResponse(null, user.getEmail());
+        }
+
         passwordResetTokenRepository.markAllUnusedByUserIdAsUsed(user.getId());
         String setupToken = UUID.randomUUID().toString();
         passwordResetTokenRepository.save(PasswordResetToken.builder()
@@ -215,7 +240,7 @@ public class BillingServiceImpl implements BillingService {
                 .used(false)
                 .build());
 
-        log.info("Activated subscription via LP for user {}", user.getId());
+        log.info("Activated subscription via LP for provisional user {}", user.getId());
         return new ActivateResponse(setupToken, user.getEmail());
     }
 }

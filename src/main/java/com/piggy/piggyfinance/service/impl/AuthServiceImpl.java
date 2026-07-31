@@ -50,6 +50,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
                 .createdAt(LocalDateTime.now())
+                .provisional(false)
                 .build();
 
         User saved = userRepository.save(user);

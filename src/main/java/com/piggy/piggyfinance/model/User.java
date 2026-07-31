@@ -38,4 +38,7 @@ public class User {
 
     @Column(name = "phone_number", unique = true)
     private String phoneNumber;
+
+    @Column(name = "provisional", nullable = false)
+    private boolean provisional;
 }

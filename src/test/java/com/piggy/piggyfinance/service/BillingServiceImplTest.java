@@ -198,7 +198,7 @@ class BillingServiceImplTest {
     }
 
     @Test
-    void activate_newEmail_createsUserSubscriptionAndSetupToken() {
+    void activate_newEmail_createsProvisionalUserAndReturnsToken() {
         StripeCheckoutData checkout = new StripeCheckoutData(
                 "cs_1", "cus_1", "sub_1", null, "novo@test.com", true);
         when(stripeGateway.retrieveCheckoutSession("cs_1")).thenReturn(checkout);
@@ -209,14 +209,16 @@ class BillingServiceImplTest {
         when(userRepository.findByEmail("novo@test.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode(any())).thenReturn("randomhash");
         User createdUser = User.builder().id(UUID.randomUUID()).name("novo").email("novo@test.com")
-                .password("randomhash").createdAt(LocalDateTime.now()).build();
-        when(userRepository.save(any(User.class))).thenReturn(createdUser);
+                .password("randomhash").createdAt(LocalDateTime.now()).provisional(true).build();
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        when(userRepository.save(userCaptor.capture())).thenReturn(createdUser);
         when(subscriptionRepository.findByUserId(createdUser.getId())).thenReturn(Optional.empty());
 
         ActivateResponse resp = service.activate("cs_1");
 
         assertThat(resp.email()).isEqualTo("novo@test.com");
         assertThat(resp.setupToken()).isNotBlank();
+        assertThat(userCaptor.getValue().isProvisional()).isTrue();
         verify(subscriptionRepository).save(subCaptor.capture());
         assertThat(subCaptor.getValue().getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         assertThat(subCaptor.getValue().getTier()).isEqualTo(SubscriptionTier.PRO);
@@ -225,6 +227,29 @@ class BillingServiceImplTest {
         InOrder inOrder = inOrder(passwordResetTokenRepository);
         inOrder.verify(passwordResetTokenRepository).markAllUnusedByUserIdAsUsed(createdUser.getId());
         inOrder.verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+    }
+
+    @Test
+    void activate_existingProvisionalAccount_returnsToken() {
+        StripeCheckoutData checkout = new StripeCheckoutData(
+                "cs_5", "cus_5", "sub_5", null, "provisional@test.com", true);
+        when(stripeGateway.retrieveCheckoutSession("cs_5")).thenReturn(checkout);
+        when(stripeGateway.retrieveSubscription("sub_5")).thenReturn(new StripeSubscriptionData(
+                "sub_5", "cus_5", "price_pro", "active",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(30), false));
+        when(stripeProperties.tierForPriceId("price_pro")).thenReturn(SubscriptionTier.PRO);
+        UUID provisionalUserId = UUID.randomUUID();
+        User provisionalUser = User.builder().id(provisionalUserId).name("provisional")
+                .email("provisional@test.com").password("hash")
+                .createdAt(LocalDateTime.now()).provisional(true).build();
+        when(userRepository.findByEmail("provisional@test.com")).thenReturn(Optional.of(provisionalUser));
+        when(subscriptionRepository.findByUserId(provisionalUserId)).thenReturn(Optional.empty());
+
+        ActivateResponse resp = service.activate("cs_5");
+
+        assertThat(resp.setupToken()).isNotBlank();
+        verify(userRepository, never()).save(any(User.class));
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
     }
 
     @Test
@@ -248,7 +273,7 @@ class BillingServiceImplTest {
     }
 
     @Test
-    void activate_existingEmail_linksSubscriptionWithoutCreatingUser() {
+    void activate_existingRealAccount_linksSubscriptionAndReturnsNoToken() {
         StripeCheckoutData checkout = new StripeCheckoutData(
                 "cs_3", "cus_3", "sub_3", null, "gab@test.com", true);
         when(stripeGateway.retrieveCheckoutSession("cs_3")).thenReturn(checkout);
@@ -262,8 +287,39 @@ class BillingServiceImplTest {
         ActivateResponse resp = service.activate("cs_3");
 
         assertThat(resp.email()).isEqualTo("gab@test.com");
+        assertThat(resp.setupToken()).isNull();
         verify(userRepository, never()).save(any(User.class));
+        verify(passwordResetTokenRepository, never()).save(any());
+        verify(passwordResetTokenRepository, never()).markAllUnusedByUserIdAsUsed(any());
         verify(subscriptionRepository).save(subCaptor.capture());
         assertThat(subCaptor.getValue().getTier()).isEqualTo(SubscriptionTier.ESSENCIAL);
+    }
+
+    @Test
+    void webhook_checkoutCompleted_unknownUserWithEmail_createsProvisionalUserAndSubscription() {
+        StripeSubscriptionData sub = new StripeSubscriptionData(
+                "sub_9", "cus_9", "price_pro", "active",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(30), false);
+        StripeWebhookEvent event = new StripeWebhookEvent(
+                "evt_9", "checkout.session.completed", null, "orphan@test.com", sub);
+        when(stripeGateway.parseWebhookEvent("payload", "sig")).thenReturn(event);
+        when(subscriptionRepository.findByStripeCustomerId("cus_9")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("orphan@test.com")).thenReturn(Optional.empty());
+        UUID orphanUserId = UUID.randomUUID();
+        User orphanUser = User.builder().id(orphanUserId).name("orphan").email("orphan@test.com")
+                .password("hash").createdAt(LocalDateTime.now()).provisional(true).build();
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        when(userRepository.save(userCaptor.capture())).thenReturn(orphanUser);
+        when(subscriptionRepository.findByUserId(orphanUserId)).thenReturn(Optional.empty());
+        when(stripeProperties.tierForPriceId("price_pro")).thenReturn(SubscriptionTier.PRO);
+
+        service.handleWebhook("payload", "sig");
+
+        assertThat(userCaptor.getValue().isProvisional()).isTrue();
+        verify(subscriptionRepository).save(subCaptor.capture());
+        Subscription saved = subCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(saved.getSource()).isEqualTo(SubscriptionSource.STRIPE);
+        verify(passwordResetTokenRepository, never()).save(any());
     }
 }

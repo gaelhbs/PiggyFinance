@@ -26,7 +26,8 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
             "/api/v1/transactions/whatsapp",
             "/api/v1/users/whatsapp/link/confirm",
             "/api/v1/transactions/whatsapp/summary",
-            "/api/v1/transactions/whatsapp/last"
+            "/api/v1/transactions/whatsapp/last",
+            "/api/v1/goals/whatsapp"
     );
     private static final String API_KEY_HEADER = "X-Api-Key";
 

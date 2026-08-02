@@ -22,5 +22,7 @@ public interface TransactionService {
 
     TransactionSummaryResponse getSummary(UUID userId, LocalDate startDate, LocalDate endDate);
 
+    TransactionSummaryResponse getSummaryByPhone(String phoneNumber, LocalDate startDate, LocalDate endDate);
+
     void deleteTransaction(UUID transactionId, UUID userId);
 }

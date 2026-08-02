@@ -133,6 +133,12 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    public TransactionSummaryResponse getSummaryByPhone(String phoneNumber, LocalDate startDate, LocalDate endDate) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        return getSummary(user.getId(), startDate, endDate);
+    }
+
+    @Override
     @Transactional
     public void deleteTransaction(UUID transactionId, UUID userId) {
         Transaction transaction = transactionRepository.findById(transactionId)

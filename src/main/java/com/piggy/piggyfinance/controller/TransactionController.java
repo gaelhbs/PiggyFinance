@@ -59,6 +59,15 @@ public class TransactionController {
         return transactionService.getSummary(userId, startDate, endDate);
     }
 
+    @GetMapping("/whatsapp/summary")
+    @ResponseStatus(HttpStatus.OK)
+    public TransactionSummaryResponse whatsappSummary(
+            @RequestParam String phoneNumber,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return transactionService.getSummaryByPhone(phoneNumber, startDate, endDate);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id,

@@ -196,4 +196,40 @@ class TransactionServiceImplTest {
         verify(transactionRepository).save(any());
         verify(transactionRepository, never()).countAppTransactionsByUserIdAndTimestampBetween(any(), any(), any());
     }
+
+    @Test
+    void getSummaryByPhone_success_delegatesToGetSummary() {
+        var phone = "+5575900000002";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w2@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        when(transactionRepository.getSummary(eq(u.getId()), any(), any())).thenReturn(java.util.List.of());
+
+        var result = service.getSummaryByPhone(phone, null, null);
+
+        assertThat(result.balance()).isEqualTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void getSummaryByPhone_phoneNotLinked_throws() {
+        var phone = "+5575900000003";
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getSummaryByPhone(phone, null, null))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.PhoneNotLinkedException.class);
+    }
+
+    @Test
+    void getSummaryByPhone_nonPro_throwsFeatureLocked() {
+        var phone = "+5575900000004";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w3@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        org.mockito.Mockito.doThrow(new com.piggy.piggyfinance.exceptions.FeatureLockedException(
+                        "This feature requires the PRO plan", SubscriptionTier.PRO))
+                .when(entitlementService).requireTier(u.getId(), SubscriptionTier.PRO);
+
+        assertThatThrownBy(() -> service.getSummaryByPhone(phone, null, null))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
+    }
 }

@@ -2,6 +2,7 @@ package com.piggy.piggyfinance.repository;
 
 import com.piggy.piggyfinance.model.Transaction;
 import com.piggy.piggyfinance.model.dto.TransactionSummaryItem;
+import com.piggy.piggyfinance.enums.TransactionSourceEnum;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TransactionRepository extends JpaRepository<Transaction, UUID>, JpaSpecificationExecutor<Transaction> {
@@ -47,4 +49,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
     @Modifying
     @Query("DELETE FROM Transaction t WHERE t.user.id = :userId")
     void deleteAllByUserId(@Param("userId") UUID userId);
+
+    Optional<Transaction> findFirstByUserIdAndSourceOrderByTimestampDesc(UUID userId, TransactionSourceEnum source);
 }

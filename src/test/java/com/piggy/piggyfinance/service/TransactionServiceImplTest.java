@@ -232,4 +232,32 @@ class TransactionServiceImplTest {
         assertThatThrownBy(() -> service.getSummaryByPhone(phone, null, null))
                 .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
     }
+
+    @Test
+    void getLastWhatsAppTransaction_success_returnsMostRecent() {
+        var phone = "+5575900000005";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w4@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        Transaction tx = mock(Transaction.class);
+        TransactionResponse resp = mock(TransactionResponse.class);
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(tx));
+        when(transactionMapper.toResponse(tx)).thenReturn(resp);
+
+        assertThat(service.getLastWhatsAppTransaction(phone)).isEqualTo(resp);
+    }
+
+    @Test
+    void getLastWhatsAppTransaction_noneFound_throwsWhatsAppTransactionNotFound() {
+        var phone = "+5575900000006";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w5@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getLastWhatsAppTransaction(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
+    }
 }

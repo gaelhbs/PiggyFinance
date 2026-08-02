@@ -9,6 +9,7 @@ import com.piggy.piggyfinance.exceptions.FeatureLockedException;
 import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
+import com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException;
 import com.piggy.piggyfinance.factory.TransactionFactory;
 import com.piggy.piggyfinance.mappers.TransactionMapper;
 import com.piggy.piggyfinance.model.Transaction;
@@ -139,6 +140,13 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    public TransactionResponse getLastWhatsAppTransaction(String phoneNumber) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        Transaction last = findLastWhatsAppTransaction(user.getId());
+        return transactionMapper.toResponse(last);
+    }
+
+    @Override
     @Transactional
     public void deleteTransaction(UUID transactionId, UUID userId) {
         Transaction transaction = transactionRepository.findById(transactionId)
@@ -160,6 +168,13 @@ public class TransactionServiceImpl implements TransactionService {
                         "No account linked to this phone number. Please link your WhatsApp in the app."));
         entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
         return user;
+    }
+
+    private Transaction findLastWhatsAppTransaction(UUID userId) {
+        return transactionRepository
+                .findFirstByUserIdAndSourceOrderByTimestampDesc(userId, TransactionSourceEnum.WHATSAPP)
+                .orElseThrow(() -> new WhatsAppTransactionNotFoundException(
+                        "No WhatsApp transaction found for this account."));
     }
 
     private static final Set<CategoryType> EXPENSE_CATEGORIES = Set.of(

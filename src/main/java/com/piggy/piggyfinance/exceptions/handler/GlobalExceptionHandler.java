@@ -108,6 +108,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("PHONE_NOT_LINKED", ex.getMessage()));
     }
 
+    @ExceptionHandler(WhatsAppTransactionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleWhatsAppTransactionNotFound(WhatsAppTransactionNotFoundException ex) {
+        log.warn("WhatsApp transaction not found: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("TRANSACTION_NOT_FOUND", ex.getMessage()));
+    }
+
     @ExceptionHandler(FeatureLockedException.class)
     public ResponseEntity<FeatureLockedResponse> handleFeatureLocked(FeatureLockedException ex) {
         log.warn("Feature locked: {} (requires {})", ex.getMessage(), ex.getRequiredTier());

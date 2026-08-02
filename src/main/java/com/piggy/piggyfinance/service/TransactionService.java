@@ -24,5 +24,7 @@ public interface TransactionService {
 
     TransactionSummaryResponse getSummaryByPhone(String phoneNumber, LocalDate startDate, LocalDate endDate);
 
+    TransactionResponse getLastWhatsAppTransaction(String phoneNumber);
+
     void deleteTransaction(UUID transactionId, UUID userId);
 }

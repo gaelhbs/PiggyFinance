@@ -26,7 +26,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/users/whatsapp/link/confirm",
             "/api/v1/billing/activate"
     );
+    private static final List<String> WHATSAPP_AI_PATHS = List.of(
+            "/api/v1/transactions/whatsapp/summary",
+            "/api/v1/transactions/whatsapp/last",
+            "/api/v1/goals/whatsapp",
+            "/api/v1/billing/whatsapp/status"
+    );
     private static final int MAX_REQUESTS = 5;
+    private static final int WHATSAPP_AI_MAX_REQUESTS = 120;
     private static final long WINDOW_MS = 60_000;
 
     private record RequestWindow(AtomicInteger count, long startTime, int observedCount) {}
@@ -35,14 +42,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !RATE_LIMITED_PATHS.contains(request.getRequestURI());
+        String uri = request.getRequestURI();
+        return !RATE_LIMITED_PATHS.contains(uri) && !WHATSAPP_AI_PATHS.contains(uri);
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String clientIp = resolveClientIp(request);
-        String key = clientIp + ":" + request.getRequestURI();
+        String uri = request.getRequestURI();
+        String key = clientIp + ":" + uri;
+        int maxRequests = WHATSAPP_AI_PATHS.contains(uri) ? WHATSAPP_AI_MAX_REQUESTS : MAX_REQUESTS;
 
         RequestWindow window = requestCounts.compute(key, (k, existing) -> {
             long now = Instant.now().toEpochMilli();
@@ -53,7 +63,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return new RequestWindow(existing.count(), existing.startTime(), newCount);
         });
 
-        if (window.observedCount() > MAX_REQUESTS) {
+        if (window.observedCount() > maxRequests) {
             log.warn("Rate limit exceeded for IP: {}", clientIp);
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json");

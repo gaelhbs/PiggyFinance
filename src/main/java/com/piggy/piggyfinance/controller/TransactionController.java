@@ -59,6 +59,36 @@ public class TransactionController {
         return transactionService.getSummary(userId, startDate, endDate);
     }
 
+    @GetMapping("/whatsapp/summary")
+    @ResponseStatus(HttpStatus.OK)
+    public TransactionSummaryResponse whatsappSummary(
+            @RequestParam String phoneNumber,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return transactionService.getSummaryByPhone(phoneNumber, startDate, endDate);
+    }
+
+    @GetMapping("/whatsapp/last")
+    @ResponseStatus(HttpStatus.OK)
+    public TransactionResponse getLastWhatsAppTransaction(@RequestParam String phoneNumber) {
+        return transactionService.getLastWhatsAppTransaction(phoneNumber);
+    }
+
+    @PatchMapping("/whatsapp/last")
+    @ResponseStatus(HttpStatus.OK)
+    public TransactionResponse updateLastWhatsAppTransaction(
+            @RequestBody @Valid CreateWhatsAppTransactionRequest request,
+            @RequestParam(required = false) UUID transactionId) {
+        return transactionService.updateLastWhatsAppTransaction(request, transactionId);
+    }
+
+    @DeleteMapping("/whatsapp/last")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteLastWhatsAppTransaction(@RequestParam String phoneNumber,
+                                              @RequestParam(required = false) UUID transactionId) {
+        transactionService.deleteLastWhatsAppTransaction(phoneNumber, transactionId);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id,

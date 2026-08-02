@@ -210,4 +210,40 @@ class GoalServiceImplTest {
         verify(goalRepository).save(any());
         verify(goalRepository, never()).countByUserId(any());
     }
+
+    @Test
+    void listByPhone_success_delegatesToList() {
+        var phone = "+5575900000012";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("wg@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        when(goalRepository.findByUserIdOrderByCreatedAtAsc(u.getId())).thenReturn(List.of(goal));
+
+        List<GoalResponse> result = service.listByPhone(phone);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void listByPhone_phoneNotLinked_throws() {
+        var phone = "+5575900000013";
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.listByPhone(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.PhoneNotLinkedException.class);
+    }
+
+    @Test
+    void listByPhone_nonPro_throwsFeatureLocked() {
+        var phone = "+5575900000014";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("wg2@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        org.mockito.Mockito.doThrow(new com.piggy.piggyfinance.exceptions.FeatureLockedException(
+                        "This feature requires the PRO plan", com.piggy.piggyfinance.enums.SubscriptionTier.PRO))
+                .when(entitlementService).requireTier(u.getId(), com.piggy.piggyfinance.enums.SubscriptionTier.PRO);
+
+        assertThatThrownBy(() -> service.listByPhone(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
+    }
 }

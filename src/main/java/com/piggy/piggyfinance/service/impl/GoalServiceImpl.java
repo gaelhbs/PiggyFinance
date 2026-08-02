@@ -3,6 +3,7 @@ package com.piggy.piggyfinance.service.impl;
 import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.BusinessException;
 import com.piggy.piggyfinance.exceptions.FeatureLockedException;
+import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.model.Goal;
@@ -65,6 +66,15 @@ public class GoalServiceImpl implements GoalService {
     public List<GoalResponse> list(UUID userId) {
         return goalRepository.findByUserIdOrderByCreatedAtAsc(userId)
                 .stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    public List<GoalResponse> listByPhone(String phoneNumber) {
+        User user = userRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new PhoneNotLinkedException(
+                        "No account linked to this phone number. Please link your WhatsApp in the app."));
+        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+        return list(user.getId());
     }
 
     @Override

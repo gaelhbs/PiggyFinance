@@ -9,6 +9,8 @@ import com.piggy.piggyfinance.exceptions.FeatureLockedException;
 import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UnauthorizedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
+import com.piggy.piggyfinance.exceptions.WhatsAppTransactionMismatchException;
+import com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException;
 import com.piggy.piggyfinance.factory.TransactionFactory;
 import com.piggy.piggyfinance.mappers.TransactionMapper;
 import com.piggy.piggyfinance.model.Transaction;
@@ -84,11 +86,7 @@ public class TransactionServiceImpl implements TransactionService {
 
         log.info("Creating WhatsApp transaction for phone: {}", request.phoneNumber());
 
-        User user = userRepository.findByPhoneNumber(request.phoneNumber())
-                .orElseThrow(() -> new PhoneNotLinkedException(
-                        "No account linked to this phone number. Please link your WhatsApp in the app."));
-
-        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+        User user = resolveWhatsAppUser(request.phoneNumber());
 
         CreateTransactionRequest transactionRequest = new CreateTransactionRequest(
                 request.description(), request.amount(), request.type(), request.category()
@@ -137,6 +135,49 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    public TransactionSummaryResponse getSummaryByPhone(String phoneNumber, LocalDate startDate, LocalDate endDate) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        return getSummary(user.getId(), startDate, endDate);
+    }
+
+    @Override
+    public TransactionResponse getLastWhatsAppTransaction(String phoneNumber) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        Transaction last = findLastWhatsAppTransaction(user.getId());
+        return transactionMapper.toResponse(last);
+    }
+
+    @Override
+    @Transactional
+    public TransactionResponse updateLastWhatsAppTransaction(CreateWhatsAppTransactionRequest request, UUID expectedTransactionId) {
+        validate(request.amount(), request.type(), request.category());
+
+        User user = resolveWhatsAppUser(request.phoneNumber());
+        Transaction existing = findLastWhatsAppTransaction(user.getId());
+        requireMatchingTransaction(existing, expectedTransactionId);
+
+        Transaction updated = transactionRepository.save(existing.toBuilder()
+                .description(request.description())
+                .amount(request.amount())
+                .type(request.type())
+                .category(request.category())
+                .build());
+
+        log.info("WhatsApp transaction updated: {}", updated.getId());
+        return transactionMapper.toResponse(updated);
+    }
+
+    @Override
+    @Transactional
+    public void deleteLastWhatsAppTransaction(String phoneNumber, UUID expectedTransactionId) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        Transaction last = findLastWhatsAppTransaction(user.getId());
+        requireMatchingTransaction(last, expectedTransactionId);
+        transactionRepository.delete(last);
+        log.info("WhatsApp transaction deleted: {}", last.getId());
+    }
+
+    @Override
     @Transactional
     public void deleteTransaction(UUID transactionId, UUID userId) {
         Transaction transaction = transactionRepository.findById(transactionId)
@@ -150,6 +191,28 @@ public class TransactionServiceImpl implements TransactionService {
     private User findUserById(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+    }
+
+    private User resolveWhatsAppUser(String phoneNumber) {
+        User user = userRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new PhoneNotLinkedException(
+                        "No account linked to this phone number. Please link your WhatsApp in the app."));
+        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+        return user;
+    }
+
+    private Transaction findLastWhatsAppTransaction(UUID userId) {
+        return transactionRepository
+                .findFirstByUserIdAndSourceOrderByTimestampDesc(userId, TransactionSourceEnum.WHATSAPP)
+                .orElseThrow(() -> new WhatsAppTransactionNotFoundException(
+                        "No WhatsApp transaction found for this account."));
+    }
+
+    private void requireMatchingTransaction(Transaction actual, UUID expectedTransactionId) {
+        if (expectedTransactionId != null && !expectedTransactionId.equals(actual.getId())) {
+            throw new WhatsAppTransactionMismatchException(
+                    "The last WhatsApp transaction changed since it was last read. Fetch it again before editing or deleting.");
+        }
     }
 
     private static final Set<CategoryType> EXPENSE_CATEGORIES = Set.of(

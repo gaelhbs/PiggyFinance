@@ -33,6 +33,12 @@ public class GoalController {
         return goalService.list(userId);
     }
 
+    @GetMapping("/whatsapp")
+    @ResponseStatus(HttpStatus.OK)
+    public List<GoalResponse> listByPhone(@RequestParam String phoneNumber) {
+        return goalService.listByPhone(phoneNumber);
+    }
+
     @PutMapping("/{id}")
     public GoalResponse update(@PathVariable UUID id,
                                @RequestBody @Valid UpdateGoalRequest request,

@@ -331,4 +331,36 @@ class TransactionServiceImplTest {
                 .isInstanceOf(BusinessException.class);
         verify(userRepository, never()).findByPhoneNumber(any());
     }
+
+    @Test
+    void deleteLastWhatsAppTransaction_success_deletes() {
+        var phone = "+5575900000010";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w8@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        Transaction existing = Transaction.builder()
+                .id(UUID.randomUUID()).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+
+        service.deleteLastWhatsAppTransaction(phone);
+
+        verify(transactionRepository).delete(existing);
+    }
+
+    @Test
+    void deleteLastWhatsAppTransaction_noneFound_throwsWhatsAppTransactionNotFound() {
+        var phone = "+5575900000011";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w9@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteLastWhatsAppTransaction(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
+        verify(transactionRepository, never()).delete(any(Transaction.class));
+    }
 }

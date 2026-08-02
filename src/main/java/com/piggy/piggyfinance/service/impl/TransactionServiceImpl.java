@@ -167,6 +167,15 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
+    public void deleteLastWhatsAppTransaction(String phoneNumber) {
+        User user = resolveWhatsAppUser(phoneNumber);
+        Transaction last = findLastWhatsAppTransaction(user.getId());
+        transactionRepository.delete(last);
+        log.info("WhatsApp transaction deleted: {}", last.getId());
+    }
+
+    @Override
+    @Transactional
     public void deleteTransaction(UUID transactionId, UUID userId) {
         Transaction transaction = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException("Transação não encontrada"));

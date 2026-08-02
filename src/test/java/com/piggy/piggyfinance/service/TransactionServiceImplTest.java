@@ -16,6 +16,8 @@ import com.piggy.piggyfinance.service.impl.TransactionServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,6 +42,7 @@ class TransactionServiceImplTest {
     @Mock TransactionMapper transactionMapper;
     @Mock com.piggy.piggyfinance.service.EntitlementService entitlementService;
     @InjectMocks TransactionServiceImpl service;
+    @Captor ArgumentCaptor<Transaction> txCaptor;
 
     private UUID userId;
     private User user;
@@ -267,22 +270,39 @@ class TransactionServiceImplTest {
         User u = User.builder().id(UUID.randomUUID()).name("W").email("w6@test.com")
                 .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
         when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+
+        UUID existingId = UUID.randomUUID();
+        LocalDateTime existingTimestamp = LocalDateTime.now();
         Transaction existing = Transaction.builder()
-                .id(UUID.randomUUID()).description("Old").amount(new BigDecimal("10"))
+                .id(existingId).description("Old").amount(new BigDecimal("10"))
                 .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
-                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+                .category(CategoryType.FOOD).timestamp(existingTimestamp).user(u).build();
         when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
                 .thenReturn(Optional.of(existing));
-        Transaction saved = mock(Transaction.class);
+
         TransactionResponse resp = mock(TransactionResponse.class);
-        when(transactionRepository.save(any())).thenReturn(saved);
-        when(transactionMapper.toResponse(saved)).thenReturn(resp);
+        when(transactionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionMapper.toResponse(any())).thenReturn(resp);
 
         var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
                 phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
 
         assertThat(service.updateLastWhatsAppTransaction(req)).isEqualTo(resp);
-        verify(transactionRepository).save(any());
+
+        verify(transactionRepository).save(txCaptor.capture());
+        Transaction saved = txCaptor.getValue();
+
+        // Verify new fields were updated
+        assertThat(saved.getDescription()).isEqualTo("Almoço");
+        assertThat(saved.getAmount()).isEqualByComparingTo(new BigDecimal("50"));
+        assertThat(saved.getType()).isEqualTo(TransactionType.EXPENSE);
+        assertThat(saved.getCategory()).isEqualTo(CategoryType.FOOD);
+
+        // Verify old fields were preserved (not replaced)
+        assertThat(saved.getId()).isEqualTo(existingId);
+        assertThat(saved.getSource()).isEqualTo(TransactionSourceEnum.WHATSAPP);
+        assertThat(saved.getUser()).isEqualTo(u);
+        assertThat(saved.getTimestamp()).isEqualTo(existingTimestamp);
     }
 
     @Test

@@ -26,5 +26,7 @@ public interface TransactionService {
 
     TransactionResponse getLastWhatsAppTransaction(String phoneNumber);
 
+    TransactionResponse updateLastWhatsAppTransaction(CreateWhatsAppTransactionRequest request);
+
     void deleteTransaction(UUID transactionId, UUID userId);
 }

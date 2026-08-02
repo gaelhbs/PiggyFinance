@@ -148,6 +148,25 @@ public class TransactionServiceImpl implements TransactionService {
 
     @Override
     @Transactional
+    public TransactionResponse updateLastWhatsAppTransaction(CreateWhatsAppTransactionRequest request) {
+        validate(request.amount(), request.type(), request.category());
+
+        User user = resolveWhatsAppUser(request.phoneNumber());
+        Transaction existing = findLastWhatsAppTransaction(user.getId());
+
+        Transaction updated = transactionRepository.save(existing.toBuilder()
+                .description(request.description())
+                .amount(request.amount())
+                .type(request.type())
+                .category(request.category())
+                .build());
+
+        log.info("WhatsApp transaction updated: {}", updated.getId());
+        return transactionMapper.toResponse(updated);
+    }
+
+    @Override
+    @Transactional
     public void deleteTransaction(UUID transactionId, UUID userId) {
         Transaction transaction = transactionRepository.findById(transactionId)
                 .orElseThrow(() -> new BusinessException("Transação não encontrada"));

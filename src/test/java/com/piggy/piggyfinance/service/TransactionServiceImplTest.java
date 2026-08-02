@@ -260,4 +260,55 @@ class TransactionServiceImplTest {
         assertThatThrownBy(() -> service.getLastWhatsAppTransaction(phone))
                 .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
     }
+
+    @Test
+    void updateLastWhatsAppTransaction_success_replacesFieldsAndSaves() {
+        var phone = "+5575900000007";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w6@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        Transaction existing = Transaction.builder()
+                .id(UUID.randomUUID()).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+        Transaction saved = mock(Transaction.class);
+        TransactionResponse resp = mock(TransactionResponse.class);
+        when(transactionRepository.save(any())).thenReturn(saved);
+        when(transactionMapper.toResponse(saved)).thenReturn(resp);
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
+
+        assertThat(service.updateLastWhatsAppTransaction(req)).isEqualTo(resp);
+        verify(transactionRepository).save(any());
+    }
+
+    @Test
+    void updateLastWhatsAppTransaction_noneFound_throwsWhatsAppTransactionNotFound() {
+        var phone = "+5575900000008";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w7@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.empty());
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
+
+        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void updateLastWhatsAppTransaction_invalidAmount_throwsBusinessException() {
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                "+5575900000009", "Almoço", BigDecimal.ZERO, TransactionType.EXPENSE, CategoryType.FOOD);
+
+        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req))
+                .isInstanceOf(BusinessException.class);
+        verify(userRepository, never()).findByPhoneNumber(any());
+    }
 }

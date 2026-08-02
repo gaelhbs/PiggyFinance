@@ -98,7 +98,7 @@ Seguindo o padrão TDD já usado no projeto (`TransactionServiceImplTest`, `Bill
   - `TransactionServiceImpl`: summary/last/update/delete por telefone — casos de sucesso, telefone não vinculado, tier bloqueado (FREE/ESSENCIAL), "last" inexistente.
   - `GoalServiceImpl`: listagem por telefone — mesmos casos de erro comuns.
   - `BillingServiceImpl`: status por telefone — mesmos casos de erro comuns.
-- **Controller tests (MockMvc)**: cada rota nova exige API Key válida (401/403 sem ela) e retorna os status HTTP corretos para cada cenário de erro.
+- **Controller tests:** não adicionados. Decisão explícita (2026-08-02): o projeto não tem hoje nenhum teste MockMvc/integração para nenhum controller — introduzir essa infra só para estas 6 rotas quebraria a consistência com o resto do código-base. A exigência de API Key continua coberta pelo `ApiKeyAuthFilter` já existente e testado em produção pelas rotas WhatsApp atuais; os controllers novos são wrappers finos sobre os services (cobertos por unit test) sem lógica própria.
 
 ---
 

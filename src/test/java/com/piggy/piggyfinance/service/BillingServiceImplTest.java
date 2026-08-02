@@ -54,6 +54,7 @@ class BillingServiceImplTest {
     @Mock PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock StripeProperties stripeProperties;
+    @Mock com.piggy.piggyfinance.service.EntitlementService entitlementService;
     @InjectMocks BillingServiceImpl service;
     @Captor ArgumentCaptor<Subscription> subCaptor;
 
@@ -321,5 +322,49 @@ class BillingServiceImplTest {
         assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         assertThat(saved.getSource()).isEqualTo(SubscriptionSource.STRIPE);
         verify(passwordResetTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void getStatusByPhone_success_returnsSubscriptionFields() {
+        var phone = "+5575900000015";
+        User u = User.builder().id(UUID.randomUUID()).name("B").email("b@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        Subscription sub = Subscription.builder()
+                .user(u).tier(SubscriptionTier.PRO).status(SubscriptionStatus.ACTIVE)
+                .source(SubscriptionSource.STRIPE)
+                .currentPeriodEnd(OffsetDateTime.now(ZoneOffset.UTC).plusDays(15))
+                .cancelAtPeriodEnd(false)
+                .build();
+        when(subscriptionRepository.findByUserId(u.getId())).thenReturn(Optional.of(sub));
+
+        var result = service.getStatusByPhone(phone);
+
+        assertThat(result.tier()).isEqualTo(SubscriptionTier.PRO);
+        assertThat(result.status()).isEqualTo(SubscriptionStatus.ACTIVE);
+        assertThat(result.cancelAtPeriodEnd()).isFalse();
+    }
+
+    @Test
+    void getStatusByPhone_phoneNotLinked_throws() {
+        var phone = "+5575900000016";
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getStatusByPhone(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.PhoneNotLinkedException.class);
+    }
+
+    @Test
+    void getStatusByPhone_nonPro_throwsFeatureLocked() {
+        var phone = "+5575900000017";
+        User u = User.builder().id(UUID.randomUUID()).name("B").email("b2@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        org.mockito.Mockito.doThrow(new com.piggy.piggyfinance.exceptions.FeatureLockedException(
+                        "This feature requires the PRO plan", SubscriptionTier.PRO))
+                .when(entitlementService).requireTier(u.getId(), SubscriptionTier.PRO);
+
+        assertThatThrownBy(() -> service.getStatusByPhone(phone))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.FeatureLockedException.class);
     }
 }

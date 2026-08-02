@@ -5,6 +5,7 @@ import com.piggy.piggyfinance.model.requests.CheckoutRequest;
 import com.piggy.piggyfinance.model.responses.ActivateResponse;
 import com.piggy.piggyfinance.model.responses.CheckoutResponse;
 import com.piggy.piggyfinance.model.responses.PortalResponse;
+import com.piggy.piggyfinance.model.responses.WhatsAppSubscriptionStatusResponse;
 import com.piggy.piggyfinance.service.BillingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -46,5 +47,11 @@ public class BillingController {
     @ResponseStatus(HttpStatus.OK)
     public ActivateResponse activate(@RequestBody @Valid ActivateRequest request) {
         return billingService.activate(request.sessionId());
+    }
+
+    @GetMapping("/whatsapp/status")
+    @ResponseStatus(HttpStatus.OK)
+    public WhatsAppSubscriptionStatusResponse whatsappStatus(@RequestParam String phoneNumber) {
+        return billingService.getStatusByPhone(phoneNumber);
     }
 }

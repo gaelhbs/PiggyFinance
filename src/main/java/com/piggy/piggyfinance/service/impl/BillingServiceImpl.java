@@ -3,16 +3,20 @@ package com.piggy.piggyfinance.service.impl;
 import com.piggy.piggyfinance.enums.SubscriptionSource;
 import com.piggy.piggyfinance.enums.SubscriptionStatus;
 import com.piggy.piggyfinance.config.StripeProperties;
+import com.piggy.piggyfinance.enums.SubscriptionTier;
 import com.piggy.piggyfinance.exceptions.BusinessException;
+import com.piggy.piggyfinance.exceptions.PhoneNotLinkedException;
 import com.piggy.piggyfinance.exceptions.UserNotFoundException;
 import com.piggy.piggyfinance.model.PasswordResetToken;
 import com.piggy.piggyfinance.model.Subscription;
 import com.piggy.piggyfinance.model.User;
 import com.piggy.piggyfinance.model.responses.ActivateResponse;
+import com.piggy.piggyfinance.model.responses.WhatsAppSubscriptionStatusResponse;
 import com.piggy.piggyfinance.repository.PasswordResetTokenRepository;
 import com.piggy.piggyfinance.repository.SubscriptionRepository;
 import com.piggy.piggyfinance.repository.UserRepository;
 import com.piggy.piggyfinance.service.BillingService;
+import com.piggy.piggyfinance.service.EntitlementService;
 import com.piggy.piggyfinance.service.stripe.StripeGateway;
 import com.piggy.piggyfinance.service.stripe.dto.StripeCheckoutData;
 import com.piggy.piggyfinance.service.stripe.dto.StripeSubscriptionData;
@@ -41,6 +45,7 @@ public class BillingServiceImpl implements BillingService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final StripeProperties stripeProperties;
+    private final EntitlementService entitlementService;
 
     @Value("${app.base-url}")
     private String appBaseUrl;
@@ -242,5 +247,23 @@ public class BillingServiceImpl implements BillingService {
 
         log.info("Activated subscription via LP for provisional user {}", user.getId());
         return new ActivateResponse(setupToken, user.getEmail());
+    }
+
+    @Override
+    public WhatsAppSubscriptionStatusResponse getStatusByPhone(String phoneNumber) {
+        User user = userRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new PhoneNotLinkedException(
+                        "No account linked to this phone number. Please link your WhatsApp in the app."));
+        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+
+        Subscription subscription = subscriptionRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new UserNotFoundException("No subscription for user: " + user.getId()));
+
+        return new WhatsAppSubscriptionStatusResponse(
+                subscription.getTier(),
+                subscription.getStatus(),
+                subscription.getCurrentPeriodEnd(),
+                subscription.isCancelAtPeriodEnd()
+        );
     }
 }

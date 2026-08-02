@@ -116,6 +116,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("TRANSACTION_NOT_FOUND", ex.getMessage()));
     }
 
+    @ExceptionHandler(WhatsAppTransactionMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleWhatsAppTransactionMismatch(WhatsAppTransactionMismatchException ex) {
+        log.warn("WhatsApp transaction mismatch: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("TRANSACTION_MISMATCH", ex.getMessage()));
+    }
+
     @ExceptionHandler(FeatureLockedException.class)
     public ResponseEntity<FeatureLockedResponse> handleFeatureLocked(FeatureLockedException ex) {
         log.warn("Feature locked: {} (requires {})", ex.getMessage(), ex.getRequiredTier());

@@ -287,7 +287,7 @@ class TransactionServiceImplTest {
         var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
                 phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
 
-        assertThat(service.updateLastWhatsAppTransaction(req)).isEqualTo(resp);
+        assertThat(service.updateLastWhatsAppTransaction(req, null)).isEqualTo(resp);
 
         verify(transactionRepository).save(txCaptor.capture());
         Transaction saved = txCaptor.getValue();
@@ -317,7 +317,7 @@ class TransactionServiceImplTest {
         var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
                 phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
 
-        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req))
+        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req, null))
                 .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
         verify(transactionRepository, never()).save(any());
     }
@@ -327,9 +327,58 @@ class TransactionServiceImplTest {
         var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
                 "+5575900000009", "Almoço", BigDecimal.ZERO, TransactionType.EXPENSE, CategoryType.FOOD);
 
-        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req))
+        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req, null))
                 .isInstanceOf(BusinessException.class);
         verify(userRepository, never()).findByPhoneNumber(any());
+    }
+
+    @Test
+    void updateLastWhatsAppTransaction_transactionIdMismatch_throwsMismatch() {
+        var phone = "+5575900000012";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w10@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+
+        Transaction existing = Transaction.builder()
+                .id(UUID.randomUUID()).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
+
+        UUID mismatchedId = UUID.randomUUID();
+        assertThatThrownBy(() -> service.updateLastWhatsAppTransaction(req, mismatchedId))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionMismatchException.class);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void updateLastWhatsAppTransaction_transactionIdMatches_succeeds() {
+        var phone = "+5575900000013";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w11@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+
+        UUID existingId = UUID.randomUUID();
+        Transaction existing = Transaction.builder()
+                .id(existingId).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+
+        TransactionResponse resp = mock(TransactionResponse.class);
+        when(transactionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionMapper.toResponse(any())).thenReturn(resp);
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                phone, "Almoço", new BigDecimal("50"), TransactionType.EXPENSE, CategoryType.FOOD);
+
+        assertThat(service.updateLastWhatsAppTransaction(req, existingId)).isEqualTo(resp);
+        verify(transactionRepository).save(any());
     }
 
     @Test
@@ -345,7 +394,7 @@ class TransactionServiceImplTest {
         when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
                 .thenReturn(Optional.of(existing));
 
-        service.deleteLastWhatsAppTransaction(phone);
+        service.deleteLastWhatsAppTransaction(phone, null);
 
         verify(transactionRepository).delete(existing);
     }
@@ -359,8 +408,46 @@ class TransactionServiceImplTest {
         when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.deleteLastWhatsAppTransaction(phone))
+        assertThatThrownBy(() -> service.deleteLastWhatsAppTransaction(phone, null))
                 .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionNotFoundException.class);
         verify(transactionRepository, never()).delete(any(Transaction.class));
+    }
+
+    @Test
+    void deleteLastWhatsAppTransaction_transactionIdMismatch_throwsMismatch() {
+        var phone = "+5575900000014";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w12@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        Transaction existing = Transaction.builder()
+                .id(UUID.randomUUID()).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+
+        UUID mismatchedId = UUID.randomUUID();
+        assertThatThrownBy(() -> service.deleteLastWhatsAppTransaction(phone, mismatchedId))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.WhatsAppTransactionMismatchException.class);
+        verify(transactionRepository, never()).delete(any(Transaction.class));
+    }
+
+    @Test
+    void deleteLastWhatsAppTransaction_transactionIdMatches_succeeds() {
+        var phone = "+5575900000015";
+        User u = User.builder().id(UUID.randomUUID()).name("W").email("w13@test.com")
+                .password("h").createdAt(LocalDateTime.now()).phoneNumber(phone).build();
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.of(u));
+        UUID existingId = UUID.randomUUID();
+        Transaction existing = Transaction.builder()
+                .id(existingId).description("Old").amount(new BigDecimal("10"))
+                .type(TransactionType.EXPENSE).source(TransactionSourceEnum.WHATSAPP)
+                .category(CategoryType.FOOD).timestamp(LocalDateTime.now()).user(u).build();
+        when(transactionRepository.findFirstByUserIdAndSourceOrderByTimestampDesc(u.getId(), TransactionSourceEnum.WHATSAPP))
+                .thenReturn(Optional.of(existing));
+
+        service.deleteLastWhatsAppTransaction(phone, existingId);
+
+        verify(transactionRepository).delete(existing);
     }
 }

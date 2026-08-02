@@ -77,14 +77,16 @@ public class TransactionController {
     @PatchMapping("/whatsapp/last")
     @ResponseStatus(HttpStatus.OK)
     public TransactionResponse updateLastWhatsAppTransaction(
-            @RequestBody @Valid CreateWhatsAppTransactionRequest request) {
-        return transactionService.updateLastWhatsAppTransaction(request);
+            @RequestBody @Valid CreateWhatsAppTransactionRequest request,
+            @RequestParam(required = false) UUID transactionId) {
+        return transactionService.updateLastWhatsAppTransaction(request, transactionId);
     }
 
     @DeleteMapping("/whatsapp/last")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteLastWhatsAppTransaction(@RequestParam String phoneNumber) {
-        transactionService.deleteLastWhatsAppTransaction(phoneNumber);
+    public void deleteLastWhatsAppTransaction(@RequestParam String phoneNumber,
+                                              @RequestParam(required = false) UUID transactionId) {
+        transactionService.deleteLastWhatsAppTransaction(phoneNumber, transactionId);
     }
 
     @DeleteMapping("/{id}")

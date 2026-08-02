@@ -84,11 +84,7 @@ public class TransactionServiceImpl implements TransactionService {
 
         log.info("Creating WhatsApp transaction for phone: {}", request.phoneNumber());
 
-        User user = userRepository.findByPhoneNumber(request.phoneNumber())
-                .orElseThrow(() -> new PhoneNotLinkedException(
-                        "No account linked to this phone number. Please link your WhatsApp in the app."));
-
-        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+        User user = resolveWhatsAppUser(request.phoneNumber());
 
         CreateTransactionRequest transactionRequest = new CreateTransactionRequest(
                 request.description(), request.amount(), request.type(), request.category()
@@ -150,6 +146,14 @@ public class TransactionServiceImpl implements TransactionService {
     private User findUserById(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+    }
+
+    private User resolveWhatsAppUser(String phoneNumber) {
+        User user = userRepository.findByPhoneNumber(phoneNumber)
+                .orElseThrow(() -> new PhoneNotLinkedException(
+                        "No account linked to this phone number. Please link your WhatsApp in the app."));
+        entitlementService.requireTier(user.getId(), SubscriptionTier.PRO);
+        return user;
     }
 
     private static final Set<CategoryType> EXPENSE_CATEGORIES = Set.of(

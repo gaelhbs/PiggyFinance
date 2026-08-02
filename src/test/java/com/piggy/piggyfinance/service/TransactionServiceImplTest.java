@@ -136,6 +136,19 @@ class TransactionServiceImplTest {
     }
 
     @Test
+    void createWhatsAppTransaction_phoneNotLinked_throwsPhoneNotLinkedException() {
+        var phone = "+5575900000001";
+        when(userRepository.findByPhoneNumber(phone)).thenReturn(Optional.empty());
+
+        var req = new com.piggy.piggyfinance.model.requests.CreateWhatsAppTransactionRequest(
+                phone, "Café", new BigDecimal("10"), TransactionType.EXPENSE, CategoryType.FOOD);
+
+        assertThatThrownBy(() -> service.createWhatsAppTransaction(req))
+                .isInstanceOf(com.piggy.piggyfinance.exceptions.PhoneNotLinkedException.class);
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
     void createTransaction_freeUserUnderMonthlyLimit_succeeds() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(entitlementService.getEffectiveTier(userId)).thenReturn(SubscriptionTier.FREE);

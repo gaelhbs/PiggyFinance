@@ -45,7 +45,7 @@ GET /api/v1/reports/pdf?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 
 - Autenticado via `@AuthenticationPrincipal UUID userId` (mesmo padrão do `TransactionController`).
 - `startDate`/`endDate` opcionais: default para o mês corrente (mesmo default de `/transactions/summary`), garantindo consistência entre os dois endpoints.
-- Se `startDate > endDate` → `BusinessException` (400), mesmo padrão de validação usado em `TransactionServiceImpl`.
+- Se `startDate > endDate` → `BusinessException`, mapeada pelo `GlobalExceptionHandler` existente para **422 Unprocessable Entity** (não 400 — é o status real usado por `handleBusiness()` para todo `BusinessException`, o mesmo padrão de validação usado em `TransactionServiceImpl`).
 - Resposta: `ResponseEntity<byte[]>` com `Content-Type: application/pdf` e `Content-Disposition: attachment; filename="relatorio-piggyfinance-<start>-<end>.pdf"`.
 
 ---
@@ -80,10 +80,38 @@ Conteúdo do PDF em **PT-BR**: valores monetários formatados via `NumberFormat.
 
 `ReportData` agrega, reaproveitando serviços/repositórios existentes sempre que possível:
 
-1. **Resumo financeiro do período** — reaproveita `TransactionRepository.getSummary()` (já existe, usado por `/transactions/summary`): income, expense, balance.
+1. **Resumo financeiro do período** — reaproveita `TransactionRepository.getSummary()` (já existe, usado por `/transactions/summary`), que retorna os totais **por `TransactionType`** (`List<TransactionSummaryItem>`, um item por INCOME/EXPENSE). O `balance` não vem da query — é calculado pelo `ReportServiceImpl` por subtração (`income - expense`), mesma lógica já usada em `TransactionServiceImpl.getSummary()`.
 2. **Gastos por categoria** — nova query agregada em `TransactionRepository`, agrupando por `category` com `type = EXPENSE` no período (mesmo padrão da query de summary existente). O service calcula o percentual de cada categoria sobre o total de despesas.
 3. **Lista detalhada de transações** — reaproveita `TransactionSpecification` (já usado em `listTransactions`), buscando todas as transações do período sem paginação, ordenadas por `timestamp`. **Teto de segurança: 500 transações.** Se o período exceder esse limite, a lista é truncada nas primeiras 500 e uma nota é exibida no rodapé da seção ("mostrando as primeiras 500 de N transações — refine o período para ver o extrato completo"). O limite é uma constante ajustável no `ReportServiceImpl`, seguindo o padrão de `FREE_MONTHLY_TRANSACTION_LIMIT` já existente no mesmo pacote.
 4. **Progresso de metas** — reaproveita `GoalRepository`, listando todas as metas do usuário (snapshot atual, não filtrado por período — metas não têm data de referência no modelo atual). Exibe `currentAmount`/`targetAmount` e o percentual de progresso.
+
+### Shape do `ReportData`
+
+DTO (record) não persistido, composto por sub-records — apenas para alimentar o template, sem exposição via API:
+
+```java
+record ReportData(
+        LocalDate startDate,
+        LocalDate endDate,
+        BigDecimal totalIncome,
+        BigDecimal totalExpense,
+        BigDecimal balance,
+        List<CategoryBreakdownItem> categoryBreakdown,
+        List<TransactionLineItem> transactions,
+        boolean transactionsTruncated,
+        long totalTransactionCount,
+        List<GoalProgressItem> goals
+) {}
+
+record CategoryBreakdownItem(CategoryType category, BigDecimal total, BigDecimal percentage) {}
+
+record TransactionLineItem(LocalDate date, String description, CategoryType category,
+                            TransactionType type, BigDecimal amount) {}
+
+record GoalProgressItem(String name, BigDecimal currentAmount, BigDecimal targetAmount, BigDecimal percentage) {}
+```
+
+`transactionsTruncated` + `totalTransactionCount` alimentam a nota de rodapé do item 3 quando o cap de 500 é atingido.
 
 ### Estados vazios
 
@@ -99,7 +127,7 @@ Nenhum dos blocos acima é tratado como erro se vazio:
 | Caso | Comportamento |
 |---|---|
 | Tier Free | `FeatureLockedException` → `FeatureLockedResponse` (já existente) |
-| `startDate > endDate` | `BusinessException` → 400 (já existente) |
+| `startDate > endDate` | `BusinessException` → 422 (já existente, ver `GlobalExceptionHandler.handleBusiness()`) |
 | Datas omitidas | Default para mês corrente (mesmo comportamento de `/transactions/summary`) |
 | Período sem dados | PDF gerado normalmente, com seções em estado vazio |
 | Falha de renderização do PDF (bug) | Propaga como 500 genérico via `GlobalExceptionHandler` — não é tratado como caso de negócio |
@@ -121,7 +149,7 @@ Seguindo o padrão TDD já usado no projeto (specs de Checkout & Planos e n8n):
   - Erro mapeado corretamente quando `FeatureLockedException` é lançada.
   - Defaults de data aplicados corretamente quando parâmetros omitidos.
 - **Teste de integração leve do PDF gerado:** confirma que os bytes retornados começam com o magic number `%PDF-` e não estão vazios — evita regressão silenciosa em que o template quebra e gera PDF corrompido.
-- **Query nova de agregação por categoria:** testada via `@DataJpaTest`, seguindo o padrão dos repositórios existentes (se houver testes de repositório no projeto; caso contrário, cobrir via `ReportServiceImplTest` com banco de teste).
+- **Query nova de agregação por categoria:** o projeto não tem hoje nenhum teste de repositório com `@DataJpaTest` (nem para a query de summary já existente) — a query nova segue o mesmo padrão e é coberta indiretamente via `ReportServiceImplTest` com o repositório mockado, sem introduzir um padrão de teste novo.
 
 ---
 

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Relatório Financeiro</title>
+    <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1a1a1a; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        h2 { font-size: 14px; margin-top: 20px; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+        .period { color: #555; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+        th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; }
+        th { background-color: #f5f5f5; }
+        .amount { text-align: right; }
+        .empty { color: #888; font-style: italic; }
+        .footer-note { color: #888; font-size: 10px; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Relatório Financeiro — PiggyFinance</h1>
+    <p class="period" th:text="'Período: ' + ${#temporals.format(startDate, 'dd/MM/yyyy')} + ' a ' + ${#temporals.format(endDate, 'dd/MM/yyyy')}">Período</p>
+
+    <h2>Resumo do período</h2>
+    <table>
+        <tr><th>Receitas</th><td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(totalIncome, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td></tr>
+        <tr><th>Despesas</th><td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(totalExpense, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td></tr>
+        <tr><th>Saldo</th><td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(balance, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td></tr>
+    </table>
+
+    <h2>Gastos por categoria</h2>
+    <p class="empty" th:if="${#lists.isEmpty(categoryBreakdown)}">Nenhuma transação no período.</p>
+    <table th:unless="${#lists.isEmpty(categoryBreakdown)}">
+        <tr><th>Categoria</th><th class="amount">Total</th><th class="amount">%</th></tr>
+        <tr th:each="item : ${categoryBreakdown}">
+            <td th:text="${item.category}">Categoria</td>
+            <td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(item.total, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td>
+            <td class="amount" th:text="${#numbers.formatDecimal(item.percentage, 1, 'POINT', 1, 'COMMA')} + '%'">0%</td>
+        </tr>
+    </table>
+
+    <h2>Extrato de transações</h2>
+    <p class="empty" th:if="${#lists.isEmpty(transactions)}">Nenhuma transação no período.</p>
+    <table th:unless="${#lists.isEmpty(transactions)}">
+        <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Tipo</th><th class="amount">Valor</th></tr>
+        <tr th:each="tx : ${transactions}">
+            <td th:text="${#temporals.format(tx.date, 'dd/MM/yyyy')}">01/01/2026</td>
+            <td th:text="${tx.description}">Descrição</td>
+            <td th:text="${tx.category}">Categoria</td>
+            <td th:text="${tx.type}">Tipo</td>
+            <td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(tx.amount, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td>
+        </tr>
+    </table>
+    <p class="footer-note" th:if="${transactionsTruncated}"
+       th:text="'Mostrando as primeiras ' + ${#lists.size(transactions)} + ' de ' + ${totalTransactionCount} + ' transações — refine o período para ver o extrato completo.'">Nota</p>
+
+    <h2>Progresso de metas</h2>
+    <p class="empty" th:if="${#lists.isEmpty(goals)}">Nenhuma meta cadastrada.</p>
+    <table th:unless="${#lists.isEmpty(goals)}">
+        <tr><th>Meta</th><th class="amount">Atual</th><th class="amount">Alvo</th><th class="amount">%</th></tr>
+        <tr th:each="goal : ${goals}">
+            <td th:text="${goal.name}">Meta</td>
+            <td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(goal.currentAmount, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td>
+            <td class="amount" th:text="'R$ ' + ${#numbers.formatDecimal(goal.targetAmount, 1, 'POINT', 2, 'COMMA')}">R$ 0,00</td>
+            <td class="amount" th:text="${#numbers.formatDecimal(goal.percentage, 1, 'POINT', 1, 'COMMA')} + '%'">0%</td>
+        </tr>
+    </table>
+</body>
+</html>

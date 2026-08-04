@@ -1,6 +1,7 @@
 package com.piggy.piggyfinance.repository;
 
 import com.piggy.piggyfinance.model.Transaction;
+import com.piggy.piggyfinance.model.dto.CategoryTotal;
 import com.piggy.piggyfinance.model.dto.TransactionSummaryItem;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,23 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
     group by t.type
 """)
     List<TransactionSummaryItem> getSummary(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+    select new com.piggy.piggyfinance.model.dto.CategoryTotal(
+        t.category,
+        sum(t.amount)
+    )
+    from Transaction t
+    where t.user.id = :userId
+      and t.type = com.piggy.piggyfinance.enums.TransactionType.EXPENSE
+      and t.timestamp between :start and :end
+    group by t.category
+""")
+    List<CategoryTotal> getExpenseByCategory(
             @Param("userId") UUID userId,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end

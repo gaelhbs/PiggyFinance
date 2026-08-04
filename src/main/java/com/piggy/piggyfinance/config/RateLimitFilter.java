@@ -24,7 +24,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/auth/register",
             "/api/auth/forgot-password",
             "/api/v1/users/whatsapp/link/confirm",
-            "/api/v1/billing/activate"
+            "/api/v1/billing/activate",
+            "/api/v1/reports/pdf"
     );
     private static final int MAX_REQUESTS = 5;
     private static final long WINDOW_MS = 60_000;

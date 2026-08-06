@@ -24,7 +24,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/auth/register",
             "/api/auth/forgot-password",
             "/api/v1/users/whatsapp/link/confirm",
-            "/api/v1/billing/activate"
+            "/api/v1/billing/activate",
+            "/api/v1/reports/pdf"
     );
     private static final List<String> WHATSAPP_AI_PATHS = List.of(
             "/api/v1/transactions/whatsapp/summary",
